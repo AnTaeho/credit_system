@@ -4061,7 +4061,13 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
-@SpringBootTest(properties = "app.seed.enabled=true")
+@SpringBootTest(properties = {
+        "app.seed.enabled=true",
+        // 다른 테스트 클래스들과 같은 이름의 H2 인메모리 DB(credit_test)를 공유하면 DB_CLOSE_DELAY=-1
+        // 때문에 시드 데이터가 JVM 전체에 걸쳐 살아남아 다른 테스트의 "alice" 삽입과 유니크 제약 충돌을 낸다.
+        // 이 테스트만 별도 이름의 DB를 써서 격리한다.
+        "spring.datasource.url=jdbc:h2:mem:seed_test;MODE=MySQL;DB_CLOSE_DELAY=-1"
+})
 class DataSeederTest {
 
     @Autowired OrganizationRepository organizationRepository;
@@ -4076,7 +4082,7 @@ class DataSeederTest {
 }
 ```
 
-`app.seed.enabled=true`를 이 테스트에서만 켜는 이유: `application-test.yml`은 다른 테스트가 시드 데이터로 오염되지 않도록 기본값을 꺼둔다(`app.scheduling`/`app.worker`와 동일한 패턴).
+`app.seed.enabled=true`를 이 테스트에서만 켜는 이유: `application-test.yml`은 다른 테스트가 시드 데이터로 오염되지 않도록 기본값을 꺼둔다(`app.scheduling`/`app.worker`와 동일한 패턴). 별도 `spring.datasource.url`을 준 이유는 다르다: `@SpringBootTest`에 프로퍼티를 다르게 주면 Spring이 새 애플리케이션 컨텍스트를 캐싱하는데, 그 새 컨텍스트도 다른 테스트들과 같은 이름의 H2 DB에 연결하면 `DB_CLOSE_DELAY=-1` 때문에 이 테스트가 심어둔 "alice"/"bob"이 JVM이 끝날 때까지 살아남는다. 실제로 이 상태에서 `JobApiControllerTest`가 "alice"를 다시 넣으려다 유니크 제약 위반으로 실패했다.
 
 - [ ] **Step 2: 컴파일 실패 확인**
 
