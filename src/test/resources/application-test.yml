@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:credit_test;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  kafka:
+    bootstrap-servers: localhost:9092
+    admin:
+      fail-fast: false
+    properties:
+      default.api.timeout.ms: 3000
+      request.timeout.ms: 3000
+
+app:
+  scheduling:
+    enabled: false
+  worker:
+    enabled: false
+  seed:
+    enabled: false
+  kafka:
+    topic: generation-jobs
+  generation:
+    cost: 100
+    max-attempts: 3
+  stub:
+    failure-rate: 0.0
+    min-delay-millis: 0
+    max-delay-millis: 0
+  heartbeat:
+    timeout-seconds: 10
+    refresh-interval-seconds: 5
