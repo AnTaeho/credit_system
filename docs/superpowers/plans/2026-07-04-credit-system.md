@@ -372,6 +372,7 @@ public record ErrorResponse(String code, String message) {
 package com.example.credit_system.global.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -394,6 +395,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateRequestInProgressException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateInProgress(DuplicateRequestInProgressException e) {
         return conflict("DUPLICATE_IN_PROGRESS", e.getMessage());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        // Task 9의 HoldService 참고: 두 요청이 동시에 중복 조회(SELECT)를 통과한 뒤 같은 idem_key로
+        // INSERT를 시도하는 극히 드문 경합에서만 여기 도달한다. 같은 세션에서 예외를 잡고 계속 쓰면
+        // Hibernate 세션이 깨지므로(AssertionFailure) HoldService는 이 경우 트랜잭션 전체를 롤백시키고,
+        // 여기서 같은 "중복 처리 중" 응답으로 번역한다.
+        return conflict("DUPLICATE_IN_PROGRESS", "동일한 요청이 동시에 처리 중입니다. 잠시 후 다시 시도해주세요.");
     }
 
     private ResponseEntity<ErrorResponse> conflict(String code, String message) {
@@ -464,6 +474,7 @@ public class CreditSystemApplication {
 package com.example.credit_system.global.exception;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -499,6 +510,15 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().code()).isEqualTo("DUPLICATE_IN_PROGRESS");
     }
+
+    @Test
+    void 유니크_제약_위반은_중복_처리중으로_번역된다() {
+        ResponseEntity<ErrorResponse> response =
+                handler.handleDataIntegrityViolation(new DataIntegrityViolationException("constraint violated"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().code()).isEqualTo("DUPLICATE_IN_PROGRESS");
+    }
 }
 ```
 
@@ -508,7 +528,7 @@ class GlobalExceptionHandlerTest {
 ./gradlew test --tests "com.example.credit_system.global.exception.GlobalExceptionHandlerTest"
 ```
 
-Expected: 3 tests PASS
+Expected: 4 tests PASS
 
 - [ ] **Step 6: 커밋**
 
@@ -2167,11 +2187,11 @@ import com.example.credit_system.organization.repository.OrganizationRepository;
 import com.example.credit_system.outbox.service.OutboxWriter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -2189,11 +2209,19 @@ public class HoldService {
 
     @Transactional
     public HoldResult requestGeneration(Long organizationId, String idemKey, String prompt) {
-        try {
-            idempotencyKeyRepository.saveAndFlush(new IdempotencyKey(organizationId, idemKey));
-        } catch (DataIntegrityViolationException e) {
-            return handleDuplicate(organizationId, idemKey);
+        Optional<IdempotencyKey> existing = idempotencyKeyRepository
+                .findByOrganizationIdAndIdemKey(organizationId, idemKey);
+        if (existing.isPresent()) {
+            return toDuplicateResult(existing.get());
         }
+
+        // 여기서 saveAndFlush로 예외를 캐치해 처리하지 않는다: Hibernate는 flush 중 예외가 발생한 세션을
+        // 계속 사용하면(같은 트랜잭션에서 추가 쿼리를 날리면) AssertionFailure로 죽어버린다(H2/MySQL 공통
+        // Hibernate 세션 동작이며 DB 종류와 무관하다). 위에서 먼저 SELECT로 대부분의 중복 요청을 걸러내고,
+        // 극히 드문 동시 경합(두 요청이 동시에 SELECT를 통과)만 unique 제약 위반으로 트랜잭션 전체가
+        // 롤백되게 두며, GlobalExceptionHandler(Task 2)의 DataIntegrityViolationException 핸들러가 이를
+        // 같은 "중복 처리 중" 응답으로 번역한다.
+        idempotencyKeyRepository.save(new IdempotencyKey(organizationId, idemKey));
 
         long cost = appProperties.generation().cost();
         Job job = deductBalanceAndCreateJob(organizationId, cost, prompt);
@@ -2206,15 +2234,11 @@ public class HoldService {
         return new HoldResult(job.getId(), false);
     }
 
-    private HoldResult handleDuplicate(Long organizationId, String idemKey) {
-        IdempotencyKey existing = idempotencyKeyRepository
-                .findByOrganizationIdAndIdemKey(organizationId, idemKey)
-                .orElseThrow(() -> new IllegalStateException("unique 제약 위반이 감지됐는데 기존 키를 찾을 수 없음"));
-
+    private HoldResult toDuplicateResult(IdempotencyKey existing) {
         if (existing.getJobId() == null) {
             throw new DuplicateRequestInProgressException();
         }
-        log.info("중복 요청 감지: organizationId={}, idemKey={}, jobId={}", organizationId, idemKey, existing.getJobId());
+        log.info("중복 요청 감지: jobId={}", existing.getJobId());
         return new HoldResult(existing.getJobId(), true);
     }
 

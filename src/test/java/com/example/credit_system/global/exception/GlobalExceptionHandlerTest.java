@@ -1,6 +1,7 @@
 package com.example.credit_system.global.exception;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -32,6 +33,15 @@ class GlobalExceptionHandlerTest {
     void 중복처리중_예외는_409와_코드를_반환한다() {
         ResponseEntity<ErrorResponse> response =
                 handler.handleDuplicateInProgress(new DuplicateRequestInProgressException());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().code()).isEqualTo("DUPLICATE_IN_PROGRESS");
+    }
+
+    @Test
+    void 유니크_제약_위반은_중복_처리중으로_번역된다() {
+        ResponseEntity<ErrorResponse> response =
+                handler.handleDataIntegrityViolation(new DataIntegrityViolationException("constraint violated"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().code()).isEqualTo("DUPLICATE_IN_PROGRESS");
