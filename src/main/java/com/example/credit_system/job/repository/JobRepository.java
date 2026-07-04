@@ -6,12 +6,19 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
 
 public interface JobRepository extends JpaRepository<Job, Long> {
 
+    // 이 리포지토리의 조건부 UPDATE 메서드들은 각각 그 자체로 원자적 연산 계약이므로, 호출부가
+    // @Transactional인지에 기대지 않고 메서드 자체에 트랜잭션을 선언한다. @KafkaListener/@Scheduled처럼
+    // 트랜잭션이 없는 컨텍스트에서 직접 호출해도 항상 안전하게 동작해야 하기 때문이다
+    // (실제로 GenerationWorker.consume()에서 트랜잭션 없이 호출했다가 TransactionRequiredException을 겪었다).
+
+    @Transactional
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Job j
@@ -23,6 +30,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                      @Param("attemptNo") int attemptNo,
                                      @Param("now") Instant now);
 
+    @Transactional
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Job j
@@ -35,6 +43,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                  @Param("attemptNo") int attemptNo,
                                  @Param("now") Instant now);
 
+    @Transactional
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Job j
@@ -47,6 +56,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                           @Param("attemptNo") int attemptNo,
                                           @Param("now") Instant now);
 
+    @Transactional
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Job j
