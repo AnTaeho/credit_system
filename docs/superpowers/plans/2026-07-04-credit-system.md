@@ -2531,6 +2531,7 @@ package com.example.credit_system.outbox.service;
 import com.example.credit_system.outbox.domain.OutboxEntry;
 import com.example.credit_system.outbox.repository.OutboxRepository;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -2539,10 +2540,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
-import org.springframework.kafka.test.annotation.EmbeddedKafka;
+import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -2576,14 +2579,17 @@ class OutboxRelayTest {
     void 미전송_outbox를_카프카로_발행하고_sent를_true로_바꾼다() {
         OutboxEntry entry = outboxRepository.save(new OutboxEntry(1L, "{\"jobId\":1}"));
 
-        Map<String, Object> consumerProps =
-                KafkaTestUtils.consumerProps("relay-test-group", "true", embeddedKafkaBroker);
-        consumerProps.put("key.deserializer", StringDeserializer.class);
-        consumerProps.put("value.deserializer", StringDeserializer.class);
+        Map<String, Object> consumerProps = new HashMap<>();
+        consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafkaBroker.getBrokersAsString());
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, "relay-test-group");
+        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         consumer = new KafkaConsumer<>(consumerProps);
         embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, "generation-jobs");
 
-        ConsumerRecord<String, String> received = KafkaTestUtils.getSingleRecord(consumer, "generation-jobs", 5000);
+        ConsumerRecord<String, String> received =
+                KafkaTestUtils.getSingleRecord(consumer, "generation-jobs", Duration.ofSeconds(5));
         assertThat(received.value()).contains("\"jobId\":1");
 
         await().atMost(3, TimeUnit.SECONDS).untilAsserted(() ->
@@ -2593,6 +2599,8 @@ class OutboxRelayTest {
 ```
 
 `app.scheduling.enabled=true`를 이 테스트에서만 다시 켜는 이유: `application-test.yml`은 기본적으로 스케줄러를 꺼두지만(다른 테스트가 의도치 않게 백그라운드에서 도는 걸 막기 위해), 이 테스트는 바로 그 스케줄러 자체를 검증해야 하므로 이 클래스에서만 켠다.
+
+이 환경의 `spring-kafka-test`도 API가 바뀌어 있다: `@EmbeddedKafka`는 `org.springframework.kafka.test.annotation` → `org.springframework.kafka.test.context`로 옮겨졌고, `KafkaTestUtils.consumerProps(group, autoCommit, broker)`는 제거 예정으로 표시돼 있어(대신 `ConsumerConfig` 상수로 직접 구성) `getSingleRecord(consumer, topic, millis)`는 `int` 대신 `Duration`을 받는 오버로드만 남아 있다. 이후 태스크(11, 17, 18)의 `@EmbeddedKafka` import도 전부 `test.context` 경로로 통일했다.
 
 - [ ] **Step 2: 컴파일 실패 확인**
 
@@ -2930,7 +2938,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.test.annotation.EmbeddedKafka;
+import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -4697,7 +4705,7 @@ import com.example.credit_system.organization.repository.OrganizationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.kafka.test.annotation.EmbeddedKafka;
+import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -4825,7 +4833,7 @@ import com.example.credit_system.organization.repository.OrganizationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.kafka.test.annotation.EmbeddedKafka;
+import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
