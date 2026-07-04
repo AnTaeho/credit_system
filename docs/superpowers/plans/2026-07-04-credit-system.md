@@ -115,6 +115,7 @@ docker-compose.yml
 
 ```groovy
 	implementation 'org.springframework.security:spring-security-crypto'
+	testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 	testImplementation 'org.testcontainers:testcontainers:2.0.5'
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.5'
@@ -125,6 +126,7 @@ docker-compose.yml
 주의:
 - `spring-security-crypto`는 BCrypt만 쓰기 위한 것이다. `spring-boot-starter-security`를 추가하면 전체 인증 필터가 걸려버리므로 **절대 추가하지 말 것**.
 - 이 환경의 Testcontainers는 2.x라 모듈명이 바뀌어 있다(`org.testcontainers:mysql` → `testcontainers-mysql`, `org.testcontainers:junit-jupiter` → `testcontainers-junit-jupiter`). Spring Boot의 의존성 관리가 옛 이름은 버전을 채워주지 않아 `Could not find org.testcontainers:junit-jupiter:.`처럼 버전이 빈 채로 실패한다 — 항상 위처럼 새 아티팩트명 + 명시적 버전(`2.0.5`, core `testcontainers`와 동일)으로 선언한다. 클래스 패키지 경로(`org.testcontainers.containers.MySQLContainer`, `org.testcontainers.junit.jupiter.Testcontainers`/`Container`)는 그대로이므로 이후 태스크의 import는 수정할 필요 없다.
+- `@DataJpaTest`가 Spring Boot 4.1부터 `spring-boot-starter-data-jpa-test`에서 분리돼 별도 모듈 `spring-boot-data-jpa-test`로 빠졌고, 패키지도 `org.springframework.boot.test.autoconfigure.orm.jpa` → `org.springframework.boot.data.jpa.test.autoconfigure`로 바뀌었다. 이 플랜의 모든 `@DataJpaTest` import는 새 패키지 경로로 이미 통일해뒀다.
 
 - [ ] **Step 2: application.properties 삭제, application.yml 생성**
 
@@ -544,7 +546,7 @@ package com.example.credit_system.organization.repository;
 import com.example.credit_system.organization.domain.Organization;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -848,7 +850,7 @@ import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.domain.JobStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -943,7 +945,7 @@ package com.example.credit_system.job.repository;
 import com.example.credit_system.job.domain.IdempotencyKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -1351,7 +1353,7 @@ package com.example.credit_system.auth.repository;
 import com.example.credit_system.auth.domain.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1927,7 +1929,7 @@ import com.example.credit_system.outbox.repository.OutboxRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
@@ -2072,7 +2074,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -2700,7 +2702,7 @@ import com.example.credit_system.ledger.repository.LedgerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -2755,7 +2757,7 @@ import com.example.credit_system.job.repository.JobRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -3156,7 +3158,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -3218,7 +3220,7 @@ import com.example.credit_system.organization.repository.OrganizationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -3510,7 +3512,7 @@ import com.example.credit_system.organization.repository.OrganizationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
