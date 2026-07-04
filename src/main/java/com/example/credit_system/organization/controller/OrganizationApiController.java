@@ -1,0 +1,43 @@
+package com.example.credit_system.organization.controller;
+
+import com.example.credit_system.global.auth.SessionConst;
+import com.example.credit_system.global.exception.ErrorResponse;
+import com.example.credit_system.organization.dto.BalanceResponse;
+import com.example.credit_system.organization.dto.ChargeRequest;
+import com.example.credit_system.organization.domain.Organization;
+import com.example.credit_system.organization.repository.OrganizationRepository;
+import com.example.credit_system.organization.service.ChargeService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/organizations")
+public class OrganizationApiController {
+
+    private final OrganizationRepository organizationRepository;
+    private final ChargeService chargeService;
+
+    @GetMapping("/me/balance")
+    public BalanceResponse myBalance(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId) {
+        Organization organization = organizationRepository.findById(organizationId).orElseThrow();
+        return new BalanceResponse(organization.getBalance());
+    }
+
+    @PostMapping("/me/charge")
+    public ResponseEntity<?> charge(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId,
+                                     @RequestBody ChargeRequest request) {
+        if (request.amount() <= 0) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", "amount는 0보다 커야 합니다."));
+        }
+        chargeService.charge(organizationId, request.amount());
+        Organization organization = organizationRepository.findById(organizationId).orElseThrow();
+        return ResponseEntity.ok(new BalanceResponse(organization.getBalance()));
+    }
+}
