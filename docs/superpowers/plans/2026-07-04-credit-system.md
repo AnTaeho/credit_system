@@ -832,8 +832,7 @@ git commit -m "feat: add Organization/Ledger entities with conditional-update re
   - `JobRepository.findByStatusOrderByIdAsc(JobStatus status): List<Job>`
   - `JobRepository.findByOrganizationIdOrderByIdDesc(Long organizationId): List<Job>`
   - `IdempotencyKey(Long organizationId, String idemKey)` 생성자, getter `getJobId():Long` (mutation 메서드 없음 — 상태 변경은 리포지토리로만)
-  - `IdempotencyKeyRepository.findByOrganizationIdAndIdemKey(Long organizationId, String idemKey): Optional<IdempotencyKey>`
-  - `IdempotencyKeyRepository.tryInsert(Long organizationId, String idemKey): int` — MySQL `INSERT IGNORE` 네이티브 쿼리, 삽입되면 1 / 중복이면 0 (예외 없이 판정)
+  - `IdempotencyKeyRepository.findByOrganizationIdAndIdemKey(Long organizationId, String idemKey): Optional<IdempotencyKey>` — `save`/`saveAndFlush`로 INSERT 시도, unique 제약 위반 시 `DataIntegrityViolationException`을 던짐(호출부에서 캐치해 중복 판정 — H2가 `INSERT IGNORE`를 지원하지 않아 이 방식으로 통일)
   - `IdempotencyKeyRepository.attachJobId(Long organizationId, String idemKey, Long jobId): int`
   - `OutboxEntry(Long jobId, String payload)` 생성자, getter `getId()`, `getJobId()`, `getPayload()`, `isSent()`
   - `OutboxRepository.findBySentFalseOrderByIdAsc(): List<OutboxEntry>`
@@ -977,17 +976,8 @@ class IdempotencyKeyRepositoryTest {
     }
 
     @Test
-    void tryInsert는_최초_1회만_1을_반환한다() {
-        int first = idempotencyKeyRepository.tryInsert(1L, "key-1");
-        int second = idempotencyKeyRepository.tryInsert(1L, "key-1");
-
-        assertThat(first).isEqualTo(1);
-        assertThat(second).isZero();
-    }
-
-    @Test
     void attachJobId로_job을_연결할_수_있다() {
-        idempotencyKeyRepository.tryInsert(1L, "key-1");
+        idempotencyKeyRepository.saveAndFlush(new IdempotencyKey(1L, "key-1"));
 
         int updated = idempotencyKeyRepository.attachJobId(1L, "key-1", 42L);
 
@@ -1225,15 +1215,6 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
 
     Optional<IdempotencyKey> findByOrganizationIdAndIdemKey(Long organizationId, String idemKey);
 
-    // MySQL 전용 INSERT IGNORE: unique 제약(organization_id, idem_key) 위반이면 예외 대신 0행을 반환한다.
-    // 예외 기반 분기(catch DataIntegrityViolationException) 대신 이 방식을 쓰는 이유:
-    // 트랜잭션 도중 SQL 예외가 발생하면 이후 같은 트랜잭션에서 추가 쿼리가 막히는 DB(PostgreSQL 등)가 있어
-    // "예외 없는 조건부 연산" 원칙을 여기서도 그대로 지킨다. H2는 MODE=MySQL일 때 INSERT IGNORE를 지원한다.
-    @Modifying(clearAutomatically = true)
-    @Query(value = "INSERT IGNORE INTO idempotency_keys (organization_id, idem_key) VALUES (:organizationId, :idemKey)",
-            nativeQuery = true)
-    int tryInsert(@Param("organizationId") Long organizationId, @Param("idemKey") String idemKey);
-
     @Modifying(clearAutomatically = true)
     @Query("UPDATE IdempotencyKey k SET k.jobId = :jobId WHERE k.organizationId = :organizationId AND k.idemKey = :idemKey")
     int attachJobId(@Param("organizationId") Long organizationId,
@@ -1241,6 +1222,8 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
                     @Param("jobId") Long jobId);
 }
 ```
+
+중복 판정은 별도 조회용 메서드를 두지 않고, 호출부(`HoldService`, Task 9)가 `idempotencyKeyRepository.saveAndFlush(new IdempotencyKey(...))`를 직접 시도해 unique 제약 위반 시 던져지는 `DataIntegrityViolationException`을 캐치하는 방식으로 판정한다. 처음엔 MySQL의 `INSERT IGNORE`로 예외 없이 판정하려 했으나, 테스트에 쓰는 H2가 `MODE=MySQL`에서도 `INSERT IGNORE` 문법을 지원하지 않아(`Syntax error ... expected "INTO"`) 두 DB 모두에서 동작하는 이 방식으로 정리했다.
 
 `OutboxEntry.java`:
 
@@ -2047,7 +2030,7 @@ git commit -m "feat: add outbox writer with JSON payload contract"
 - Test: `src/test/java/com/example/credit_system/job/controller/JobApiControllerTest.java`
 
 **Interfaces:**
-- Consumes: `IdempotencyKeyRepository.tryInsert/attachJobId/findByOrganizationIdAndIdemKey` (Task 4), `OrganizationRepository.deductBalance` (Task 3), `JobRepository`, `LedgerRepository`, `OutboxWriter.write` (Task 8), `AppProperties.generation()` (Task 2), `InsufficientBalanceException`/`BalanceConflictException`/`DuplicateRequestInProgressException` (Task 2), `SessionConst.ORGANIZATION_ID` (Task 6)
+- Consumes: `IdempotencyKeyRepository.attachJobId/findByOrganizationIdAndIdemKey` (Task 4), `OrganizationRepository.deductBalance` (Task 3), `JobRepository`, `LedgerRepository`, `OutboxWriter.write` (Task 8), `AppProperties.generation()` (Task 2), `InsufficientBalanceException`/`BalanceConflictException`/`DuplicateRequestInProgressException` (Task 2), `SessionConst.ORGANIZATION_ID` (Task 6)
 - Produces:
   - `HoldResult(Long jobId, boolean duplicate)`
   - `HoldService.requestGeneration(Long organizationId, String idemKey, String prompt): HoldResult` — design.md 6.1을 그대로 구현 (Long 버전)
@@ -2177,6 +2160,7 @@ import com.example.credit_system.organization.repository.OrganizationRepository;
 import com.example.credit_system.outbox.service.OutboxWriter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -2198,8 +2182,9 @@ public class HoldService {
 
     @Transactional
     public HoldResult requestGeneration(Long organizationId, String idemKey, String prompt) {
-        int inserted = idempotencyKeyRepository.tryInsert(organizationId, idemKey);
-        if (inserted == 0) {
+        try {
+            idempotencyKeyRepository.saveAndFlush(new IdempotencyKey(organizationId, idemKey));
+        } catch (DataIntegrityViolationException e) {
             return handleDuplicate(organizationId, idemKey);
         }
 
@@ -2217,7 +2202,7 @@ public class HoldService {
     private HoldResult handleDuplicate(Long organizationId, String idemKey) {
         IdempotencyKey existing = idempotencyKeyRepository
                 .findByOrganizationIdAndIdemKey(organizationId, idemKey)
-                .orElseThrow(() -> new IllegalStateException("tryInsert가 0을 반환했는데 기존 키를 찾을 수 없음"));
+                .orElseThrow(() -> new IllegalStateException("unique 제약 위반이 감지됐는데 기존 키를 찾을 수 없음"));
 
         if (existing.getJobId() == null) {
             throw new DuplicateRequestInProgressException();
