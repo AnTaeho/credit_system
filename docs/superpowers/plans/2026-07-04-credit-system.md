@@ -116,6 +116,7 @@ docker-compose.yml
 ```groovy
 	implementation 'org.springframework.security:spring-security-crypto'
 	testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-restclient'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 	testImplementation 'org.testcontainers:testcontainers:2.0.5'
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.5'
@@ -127,6 +128,7 @@ docker-compose.yml
 - `spring-security-crypto`는 BCrypt만 쓰기 위한 것이다. `spring-boot-starter-security`를 추가하면 전체 인증 필터가 걸려버리므로 **절대 추가하지 말 것**.
 - 이 환경의 Testcontainers는 2.x라 모듈명이 바뀌어 있다(`org.testcontainers:mysql` → `testcontainers-mysql`, `org.testcontainers:junit-jupiter` → `testcontainers-junit-jupiter`). Spring Boot의 의존성 관리가 옛 이름은 버전을 채워주지 않아 `Could not find org.testcontainers:junit-jupiter:.`처럼 버전이 빈 채로 실패한다 — 항상 위처럼 새 아티팩트명 + 명시적 버전(`2.0.5`, core `testcontainers`와 동일)으로 선언한다. 클래스 패키지 경로(`org.testcontainers.containers.MySQLContainer`, `org.testcontainers.junit.jupiter.Testcontainers`/`Container`)는 그대로이므로 이후 태스크의 import는 수정할 필요 없다.
 - `@DataJpaTest`가 Spring Boot 4.1부터 `spring-boot-starter-data-jpa-test`에서 분리돼 별도 모듈 `spring-boot-data-jpa-test`로 빠졌고, 패키지도 `org.springframework.boot.test.autoconfigure.orm.jpa` → `org.springframework.boot.data.jpa.test.autoconfigure`로 바뀌었다. 이 플랜의 모든 `@DataJpaTest` import는 새 패키지 경로로 이미 통일해뒀다.
+- `TestRestTemplate`도 Spring Boot 4.1부터 별도 모듈 `spring-boot-resttestclient`로 빠지고 패키지가 `org.springframework.boot.test.web.client` → `org.springframework.boot.resttestclient`로 바뀌었다. 게다가 이 모듈은 `@AutoConfigureTestRestTemplate`을 테스트 클래스에 명시해야만 `TestRestTemplate` 빈이 자동구성된다(과거처럼 `@SpringBootTest(webEnvironment=RANDOM_PORT)`만으로는 안 됨). `TestRestTemplate` 자동구성은 `RestTemplateBuilder`(`spring-boot-restclient` 모듈)가 클래스패스에 있어야 조건이 충족되므로 위 의존성이 필요하다. 또한 이 버전의 `TestRestTemplate`은 **기본적으로 리다이렉트를 따라간다**(과거와 반대) — 3xx 응답 자체를 검증하려면 `restTemplate.withRedirects(org.springframework.boot.http.client.HttpRedirects.DONT_FOLLOW)`로 리다이렉트를 끈 인스턴스를 받아 써야 한다. 이 플랜의 모든 `TestRestTemplate` 기반 테스트는 이 세 가지(새 import, `@AutoConfigureTestRestTemplate`, `withRedirects`)를 이미 반영했다.
 
 - [ ] **Step 2: application.properties 삭제, application.yml 생성**
 
@@ -1484,11 +1486,14 @@ package com.example.credit_system.auth.controller;
 
 import com.example.credit_system.auth.domain.User;
 import com.example.credit_system.auth.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.http.client.HttpRedirects;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -1504,6 +1509,7 @@ import org.springframework.util.MultiValueMap;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class LoginControllerTest {
 
@@ -1524,12 +1530,20 @@ class LoginControllerTest {
         userRepository.save(new User(1L, "alice", passwordEncoder.encode("secret123")));
     }
 
+    @AfterEach
+    void tearDown() {
+        // @SpringBootTest는 @DataJpaTest와 달리 테스트 메서드마다 트랜잭션을 롤백하지 않는다
+        // (실제 내장 서버 스레드가 처리하므로 롤백 경계가 다르다) — 다음 테스트의 유니크 제약 충돌을 막기 위해 직접 정리한다.
+        userRepository.deleteAll();
+    }
+
     @Test
     void 올바른_비밀번호로_로그인하면_대시보드로_리다이렉트되고_세션쿠키가_발급된다() {
         ResponseEntity<Void> response = login("alice", "secret123");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
-        assertThat(response.getHeaders().getLocation().getPath()).isEqualTo("/dashboard");
+        // 신규 세션 생성 시 서블릿 컨테이너가 쿠키 미지원 폴백으로 ";jsessionid=..."를 경로에 붙이므로 startsWith로 확인한다.
+        assertThat(response.getHeaders().getLocation().getPath()).startsWith("/dashboard");
         assertThat(response.getHeaders().get(HttpHeaders.SET_COOKIE)).isNotNull();
     }
 
@@ -1549,8 +1563,7 @@ class LoginControllerTest {
         form.add("username", username);
         form.add("password", password);
 
-        TestRestTemplate noRedirects = restTemplate.withRequestInterceptor((request, body, execution) -> execution.execute(request, body));
-        return noRedirects.exchange(
+        return restTemplate.withRedirects(HttpRedirects.DONT_FOLLOW).exchange(
                 "http://localhost:" + port + "/login",
                 HttpMethod.POST,
                 new HttpEntity<>(form, headers),
@@ -1559,7 +1572,7 @@ class LoginControllerTest {
 }
 ```
 
-주의: `TestRestTemplate`은 기본적으로 리다이렉트를 자동으로 따라가지 않는 `SimpleClientHttpRequestFactory` 기반이라 위 코드로 302 응답 자체를 그대로 관찰할 수 있다.
+주의: 이 버전의 `TestRestTemplate`은 기본적으로 리다이렉트를 따라가므로, `withRedirects(HttpRedirects.DONT_FOLLOW)`로 리다이렉트를 끈 인스턴스를 받아써야 302 응답 자체를 그대로 관찰할 수 있다.
 
 - [ ] **Step 2: 컴파일 실패 확인**
 
@@ -2352,11 +2365,14 @@ import com.example.credit_system.job.dto.JobCreateResponse;
 import com.example.credit_system.job.dto.JobResponse;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.http.client.HttpRedirects;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -2374,6 +2390,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class JobApiControllerTest {
 
@@ -2398,6 +2415,12 @@ class JobApiControllerTest {
     void setUp() {
         organization = organizationRepository.save(new Organization("acme", 1000L));
         userRepository.save(new User(organization.getId(), "alice", passwordEncoder.encode("secret123")));
+    }
+
+    @AfterEach
+    void tearDown() {
+        userRepository.deleteAll();
+        organizationRepository.deleteAll();
     }
 
     @Test
@@ -2437,7 +2460,7 @@ class JobApiControllerTest {
         form.add("username", "alice");
         form.add("password", "secret123");
 
-        ResponseEntity<Void> response = restTemplate.exchange(
+        ResponseEntity<Void> response = restTemplate.withRedirects(HttpRedirects.DONT_FOLLOW).exchange(
                 url("/login"), HttpMethod.POST, new HttpEntity<>(form, headers), Void.class);
 
         return response.getHeaders().get(HttpHeaders.SET_COOKIE).get(0).split(";")[0];
@@ -3675,11 +3698,14 @@ import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.dto.BalanceResponse;
 import com.example.credit_system.organization.dto.ChargeRequest;
 import com.example.credit_system.organization.repository.OrganizationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.http.client.HttpRedirects;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -3694,6 +3720,7 @@ import org.springframework.util.MultiValueMap;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class OrganizationApiControllerTest {
 
@@ -3709,6 +3736,12 @@ class OrganizationApiControllerTest {
     void setUp() {
         organization = organizationRepository.save(new Organization("acme", 500L));
         userRepository.save(new User(organization.getId(), "alice", passwordEncoder.encode("secret123")));
+    }
+
+    @AfterEach
+    void tearDown() {
+        userRepository.deleteAll();
+        organizationRepository.deleteAll();
     }
 
     @Test
@@ -3735,7 +3768,7 @@ class OrganizationApiControllerTest {
         form.add("username", "alice");
         form.add("password", "secret123");
 
-        ResponseEntity<Void> response = restTemplate.exchange(
+        ResponseEntity<Void> response = restTemplate.withRedirects(HttpRedirects.DONT_FOLLOW).exchange(
                 url("/login"), HttpMethod.POST, new HttpEntity<>(form, headers), Void.class);
 
         return response.getHeaders().get(HttpHeaders.SET_COOKIE).get(0).split(";")[0];
@@ -3790,11 +3823,14 @@ import com.example.credit_system.ledger.dto.LedgerResponse;
 import com.example.credit_system.ledger.repository.LedgerRepository;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.http.client.HttpRedirects;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -3812,6 +3848,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class LedgerApiControllerTest {
 
@@ -3830,6 +3867,13 @@ class LedgerApiControllerTest {
         userRepository.save(new User(organization.getId(), "alice", passwordEncoder.encode("secret123")));
         ledgerRepository.save(LedgerEntry.of(organization.getId(), 1L, LedgerType.HOLD, -100L));
         ledgerRepository.save(LedgerEntry.of(organization.getId(), null, LedgerType.CHARGE, 500L));
+    }
+
+    @AfterEach
+    void tearDown() {
+        ledgerRepository.deleteAll();
+        userRepository.deleteAll();
+        organizationRepository.deleteAll();
     }
 
     @Test
@@ -3860,7 +3904,7 @@ class LedgerApiControllerTest {
         form.add("username", "alice");
         form.add("password", "secret123");
 
-        ResponseEntity<Void> response = restTemplate.exchange(
+        ResponseEntity<Void> response = restTemplate.withRedirects(HttpRedirects.DONT_FOLLOW).exchange(
                 url("/login"), HttpMethod.POST, new HttpEntity<>(form, headers), Void.class);
 
         return response.getHeaders().get(HttpHeaders.SET_COOKIE).get(0).split(";")[0];
@@ -4091,11 +4135,14 @@ import com.example.credit_system.auth.domain.User;
 import com.example.credit_system.auth.repository.UserRepository;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.http.client.HttpRedirects;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -4111,6 +4158,7 @@ import org.springframework.util.MultiValueMap;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
+@AutoConfigureTestRestTemplate
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class DashboardControllerTest {
 
@@ -4126,6 +4174,12 @@ class DashboardControllerTest {
         userRepository.save(new User(organization.getId(), "alice", passwordEncoder.encode("secret123")));
     }
 
+    @AfterEach
+    void tearDown() {
+        userRepository.deleteAll();
+        organizationRepository.deleteAll();
+    }
+
     @Test
     void 로그인_페이지는_200을_반환한다() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/login"), String.class);
@@ -4135,7 +4189,8 @@ class DashboardControllerTest {
 
     @Test
     void 세션_없이_대시보드에_접근하면_로그인으로_리다이렉트된다() {
-        ResponseEntity<String> response = restTemplate.getForEntity(url("/dashboard"), String.class);
+        ResponseEntity<String> response = restTemplate.withRedirects(HttpRedirects.DONT_FOLLOW)
+                .getForEntity(url("/dashboard"), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
         assertThat(response.getHeaders().getLocation().getPath()).isEqualTo("/login");
@@ -4160,7 +4215,7 @@ class DashboardControllerTest {
         form.add("username", "alice");
         form.add("password", "secret123");
 
-        ResponseEntity<Void> response = restTemplate.exchange(
+        ResponseEntity<Void> response = restTemplate.withRedirects(HttpRedirects.DONT_FOLLOW).exchange(
                 url("/login"), HttpMethod.POST, new HttpEntity<>(form, headers), Void.class);
 
         return response.getHeaders().get(HttpHeaders.SET_COOKIE).get(0).split(";")[0];
