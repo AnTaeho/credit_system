@@ -262,18 +262,26 @@ services:
       - "6379:6379"
 
   kafka:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:3.7.0
     ports:
       - "9092:9092"
     environment:
-      - KAFKA_CFG_NODE_ID=0
-      - KAFKA_CFG_PROCESS_ROLES=controller,broker
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_NODE_ID=0
+      - KAFKA_PROCESS_ROLES=controller,broker
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
 ```
+
+주의(Task 19에서 실제 `docker compose up`으로 검증하며 발견):
+- `bitnami/kafka:3.7` 이미지는 이 시점 기준 Docker Hub에서 더 이상 받아지지 않는다(Bitnami가 레거시 태그를 정리함). 공식 `apache/kafka:3.7.0` 이미지로 대체하고, 환경변수 접두어를 bitnami의 `KAFKA_CFG_*`에서 공식 이미지의 `KAFKA_*`로 바꿨다.
+- `KAFKA_CONTROLLER_QUORUM_VOTERS`는 `localhost:9093`이 아니라 컨테이너 자신의 서비스명(`kafka:9093`)을 가리켜야 한다 — `localhost`로 두면 컨트롤러가 스스로를 찾지 못해 `__consumer_offsets` 자동 생성 요청이 무한 재시도만 반복하고, 컨슈머 그룹이 코디네이터를 영영 찾지 못한다.
+- `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1`을 명시하지 않으면 기본값(3)이 브로커 1개짜리 단일 노드 클러스터에 맞지 않아 `__consumer_offsets` 토픽 자동 생성이 계속 실패한다 — 이 경우 `generation-jobs` 토픽 발행은 되지만(직접 만든 토픽이라) 컨슈머가 그룹에 join하지 못해 워커가 메시지를 영원히 못 받는, 겉으로는 조용히 멈춘 것처럼 보이는 버그가 된다.
 
 - [ ] **Step 5: 검증**
 
