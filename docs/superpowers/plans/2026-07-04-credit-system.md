@@ -1922,7 +1922,7 @@ package com.example.credit_system.outbox.service;
 
 import com.example.credit_system.outbox.domain.OutboxEntry;
 import com.example.credit_system.outbox.repository.OutboxRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -1986,10 +1986,9 @@ package com.example.credit_system.outbox.service;
 import com.example.credit_system.outbox.domain.GenerationJobMessage;
 import com.example.credit_system.outbox.domain.OutboxEntry;
 import com.example.credit_system.outbox.repository.OutboxRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -2000,18 +1999,13 @@ public class OutboxWriter {
 
     public void write(Long jobId, Long organizationId, int attemptNo, String prompt) {
         GenerationJobMessage message = new GenerationJobMessage(jobId, organizationId, attemptNo, prompt);
-        outboxRepository.save(new OutboxEntry(jobId, toJson(message)));
-    }
-
-    private String toJson(GenerationJobMessage message) {
-        try {
-            return objectMapper.writeValueAsString(message);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("outbox payload 직렬화 실패: " + message, e);
-        }
+        String payload = objectMapper.writeValueAsString(message);
+        outboxRepository.save(new OutboxEntry(jobId, payload));
     }
 }
 ```
+
+이 환경은 Jackson 3.x라 패키지가 `com.fasterxml.jackson` → `tools.jackson`으로 바뀌었고, `writeValueAsString`이 던지는 `JacksonException`도 `RuntimeException`의 하위 타입(unchecked)으로 바뀌었다. 그래서 `JsonProcessingException`을 캐치해 `IllegalStateException`으로 감싸던 코드가 필요 없어져 그대로 제거했다 — 직렬화 실패는 내부 버그일 뿐이라 굳이 잡아 감쌀 이유가 없다.
 
 - [ ] **Step 4: 테스트 통과 확인**
 
@@ -2066,7 +2060,7 @@ import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
 import com.example.credit_system.outbox.repository.OutboxRepository;
 import com.example.credit_system.outbox.service.OutboxWriter;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -2907,7 +2901,7 @@ import com.example.credit_system.ledger.repository.LedgerRepository;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
 import com.example.credit_system.outbox.domain.GenerationJobMessage;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -2952,7 +2946,7 @@ class GenerationWorkerTest {
     @Autowired ObjectMapper objectMapper;
 
     @Test
-    void 카프카_메시지를_소비하면_job이_완료되고_confirm_ledger가_남는다() throws Exception {
+    void 카프카_메시지를_소비하면_job이_완료되고_confirm_ledger가_남는다() {
         Organization organization = organizationRepository.save(new Organization("acme", 1000L));
         Job job = jobRepository.save(Job.hold(organization.getId(), 100L, "a cat"));
 
@@ -3062,7 +3056,7 @@ import com.example.credit_system.job.service.FailureService;
 import com.example.credit_system.job.stub.GenerationStubClient;
 import com.example.credit_system.job.stub.StubGenerationException;
 import com.example.credit_system.outbox.domain.GenerationJobMessage;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -3086,7 +3080,7 @@ public class GenerationWorker {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "${app.kafka.topic}")
-    public void consume(String payload) throws Exception {
+    public void consume(String payload) {
         GenerationJobMessage message = objectMapper.readValue(payload, GenerationJobMessage.class);
 
         int updated = jobRepository.updateStatusIfAttemptMatches(
@@ -3162,7 +3156,7 @@ import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.outbox.repository.OutboxRepository;
 import com.example.credit_system.outbox.service.OutboxWriter;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
