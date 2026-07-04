@@ -4494,6 +4494,8 @@ git commit -m "feat: add dashboard UI with polling job/ledger views"
 - Consumes: `HoldService` (Task 9), `JobRepository`/`OrganizationRepository`/`LedgerRepository` (Task 3, 4), `DeadJobSchedulerTask`/`OutboxRelay`/`GenerationWorker` (Task 10~12, 실제로 켠 채로 실행)
 - 이 태스크는 새 production 코드를 만들지 않는다 — 지금까지 만든 모든 조각이 실제 MySQL(+Kafka+Redis)에서도 맞물려 동작하는지 검증하는 테스트만 추가한다
 
+주의: `@DynamicPropertySource`로 `spring.datasource.url`만 MySQL 컨테이너 주소로 바꾸는 것으로는 부족하다. `application-test.yml`의 `spring.datasource.driver-class-name: org.h2.Driver`가 그대로 남아있어서 `Driver org.h2.Driver claims to not accept jdbcUrl, jdbc:mysql://...` 오류가 난다. `mysql::getDriverClassName`으로 드라이버도 함께 오버라이드해야 한다 — 아래 모든 동시성/E2E 테스트(Task 17, 18)에 이미 반영했다.
+
 - [ ] **Step 1: ConcurrentHoldTest 작성 — 동시 hold 요청이 잔액을 음수로 만들지 않는다**
 
 `src/test/java/com/example/credit_system/job/concurrency/ConcurrentHoldTest.java`:
@@ -4540,6 +4542,7 @@ class ConcurrentHoldTest {
         registry.add("spring.datasource.url", mysql::getJdbcUrl);
         registry.add("spring.datasource.username", mysql::getUsername);
         registry.add("spring.datasource.password", mysql::getPassword);
+        registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName);
     }
 
     @Autowired HoldService holdService;
@@ -4647,6 +4650,7 @@ class DuplicateIdemKeyTest {
         registry.add("spring.datasource.url", mysql::getJdbcUrl);
         registry.add("spring.datasource.username", mysql::getUsername);
         registry.add("spring.datasource.password", mysql::getPassword);
+        registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName);
     }
 
     @Autowired HoldService holdService;
@@ -4766,6 +4770,7 @@ class RetryRefundTest {
         registry.add("spring.datasource.url", mysql::getJdbcUrl);
         registry.add("spring.datasource.username", mysql::getUsername);
         registry.add("spring.datasource.password", mysql::getPassword);
+        registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName);
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
@@ -4893,6 +4898,7 @@ class GenerationPipelineEndToEndTest {
         registry.add("spring.datasource.url", mysql::getJdbcUrl);
         registry.add("spring.datasource.username", mysql::getUsername);
         registry.add("spring.datasource.password", mysql::getPassword);
+        registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName);
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
