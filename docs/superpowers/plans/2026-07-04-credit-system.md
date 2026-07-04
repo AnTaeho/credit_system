@@ -116,13 +116,15 @@ docker-compose.yml
 ```groovy
 	implementation 'org.springframework.security:spring-security-crypto'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-	testImplementation 'org.testcontainers:junit-jupiter'
-	testImplementation 'org.testcontainers:testcontainers'
-	testImplementation 'org.testcontainers:mysql'
+	testImplementation 'org.testcontainers:testcontainers:2.0.5'
+	testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.5'
+	testImplementation 'org.testcontainers:testcontainers-mysql:2.0.5'
 	testImplementation 'org.awaitility:awaitility'
 ```
 
-주의: `spring-security-crypto`는 BCrypt만 쓰기 위한 것이다. `spring-boot-starter-security`를 추가하면 전체 인증 필터가 걸려버리므로 **절대 추가하지 말 것**.
+주의:
+- `spring-security-crypto`는 BCrypt만 쓰기 위한 것이다. `spring-boot-starter-security`를 추가하면 전체 인증 필터가 걸려버리므로 **절대 추가하지 말 것**.
+- 이 환경의 Testcontainers는 2.x라 모듈명이 바뀌어 있다(`org.testcontainers:mysql` → `testcontainers-mysql`, `org.testcontainers:junit-jupiter` → `testcontainers-junit-jupiter`). Spring Boot의 의존성 관리가 옛 이름은 버전을 채워주지 않아 `Could not find org.testcontainers:junit-jupiter:.`처럼 버전이 빈 채로 실패한다 — 항상 위처럼 새 아티팩트명 + 명시적 버전(`2.0.5`, core `testcontainers`와 동일)으로 선언한다. 클래스 패키지 경로(`org.testcontainers.containers.MySQLContainer`, `org.testcontainers.junit.jupiter.Testcontainers`/`Container`)는 그대로이므로 이후 태스크의 import는 수정할 필요 없다.
 
 - [ ] **Step 2: application.properties 삭제, application.yml 생성**
 
