@@ -31,6 +31,7 @@ public class Organization {
     @Column(nullable = false)
     private long version;
 
+    // TODO : BaseEntity로 추출
     @Column(nullable = false)
     private Instant createdAt;
 
