@@ -1,0 +1,310 @@
+:root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e2e5ea;
+    --text: #1f2430;
+    --text-muted: #6b7280;
+    --primary: #3457d5;
+    --primary-hover: #2941ab;
+    --danger: #dc2626;
+    --danger-bg: #fdecec;
+    --success: #15803d;
+    --success-bg: #e9f7ef;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+}
+
+a {
+    color: var(--primary);
+}
+
+/* ---------- shared form controls ---------- */
+
+input[type="text"],
+input[type="password"],
+input[type="number"] {
+    font: inherit;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+}
+
+input:focus-visible,
+button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+}
+
+button {
+    font: inherit;
+    font-weight: 600;
+    padding: 0.55rem 1.1rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: var(--primary);
+    color: #fff;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--primary-hover);
+}
+
+button:disabled {
+    background: var(--border);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+button.secondary {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+button.secondary:hover {
+    background: var(--bg);
+}
+
+/* ---------- login page ---------- */
+
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 2rem;
+}
+
+.login-card h1 {
+    font-size: 1.25rem;
+    margin: 0 0 1.5rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+.field label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.login-card button[type="submit"] {
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+.error-message {
+    margin-top: 1rem;
+    padding: 0.65rem 0.85rem;
+    background: var(--danger-bg);
+    color: var(--danger);
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+/* ---------- dashboard shell ---------- */
+
+.page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+}
+
+.page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.75rem;
+}
+
+.page-header h1 {
+    font-size: 1.35rem;
+    margin: 0;
+}
+
+.page-header .user-tag {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.page-header .user-tag strong {
+    color: var(--text);
+}
+
+.card-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.25rem 1.4rem;
+}
+
+.card h2 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 0 0 0.75rem;
+}
+
+.balance-value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 1rem;
+}
+
+.inline-form {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.inline-form input[type="number"] {
+    width: 100%;
+}
+
+.inline-form input[type="text"] {
+    flex: 1;
+}
+
+/* ---------- tabs ---------- */
+
+.tabs {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    margin: 0.5rem 0 1rem;
+}
+
+.tabs button {
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    padding: 0.45rem 0.9rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.tabs button:hover {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.tabs button.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.tab-panel.hidden {
+    display: none;
+}
+
+/* ---------- table ---------- */
+
+.table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    text-align: left;
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+}
+
+th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    background: var(--bg);
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr:hover {
+    background: var(--bg);
+}
+
+td.empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 1.5rem;
+}
+
+/* ---------- status badges ---------- */
+
+.badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: var(--border);
+    color: var(--text-muted);
+}
+
+.badge-completed { background: var(--success-bg); color: var(--success); }
+.badge-failed { background: var(--danger-bg); color: var(--danger); }
+.badge-processing { background: #fef3c7; color: #92400e; }
+.badge-holding { background: #e0e7ff; color: #4338ca; }
+.badge-refunded { background: #e5e7eb; color: #374151; }
+
+@media (max-width: 640px) {
+    .card-row {
+        grid-template-columns: 1fr;
+    }
+    .inline-form {
+        flex-direction: column;
+    }
+}

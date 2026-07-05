@@ -2,54 +2,67 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Credit System 대시보드</title>
-    <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; }
-        table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-        th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
-        .hidden { display: none; }
-    </style>
+    <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<h1>Credit System 대시보드</h1>
-<p>로그인: <strong th:text="${username}">username</strong></p>
+<div class="page">
+    <header class="page-header">
+        <h1>Credit System</h1>
+        <span class="user-tag">로그인: <strong th:text="${username}">username</strong></span>
+    </header>
 
-<section>
-    <h2>잔액: <span id="balance">-</span></h2>
-    <form id="charge-form">
-        <input type="number" id="charge-amount" min="1" value="1000" required>
-        <button type="submit">충전</button>
-    </form>
-</section>
+    <div class="card-row">
+        <section class="card">
+            <h2>잔액</h2>
+            <p class="balance-value"><span id="balance">-</span></p>
+            <form id="charge-form" class="inline-form">
+                <input type="number" id="charge-amount" min="1" value="1000" required>
+                <button type="submit">충전</button>
+            </form>
+        </section>
 
-<section>
-    <h2>새 생성 요청</h2>
-    <form id="job-form">
-        <input type="text" id="prompt" placeholder="예: a cat wearing sunglasses" required style="width:60%">
-        <button type="submit" id="submit-btn">요청</button>
-    </form>
-</section>
+        <section class="card">
+            <h2>새 생성 요청</h2>
+            <form id="job-form" class="inline-form">
+                <input type="text" id="prompt" placeholder="예: a cat wearing sunglasses" required>
+                <button type="submit" id="submit-btn">요청</button>
+            </form>
+        </section>
+    </div>
 
-<div>
-    <button onclick="showTab('jobs')">Job 목록</button>
-    <button onclick="showTab('ledger')">Ledger 내역</button>
+    <div class="tabs">
+        <button type="button" id="tab-btn-jobs" class="active" onclick="showTab('jobs')">Job 목록</button>
+        <button type="button" id="tab-btn-ledger" onclick="showTab('ledger')">Ledger 내역</button>
+    </div>
+
+    <section id="jobs-tab" class="tab-panel">
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>상태</th><th>시도</th><th>차감액</th><th>프롬프트</th><th>결과</th></tr></thead>
+                <tbody id="jobs-body"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="ledger-tab" class="tab-panel hidden">
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>타입</th><th>금액</th><th>Job ID</th><th>시각</th></tr></thead>
+                <tbody id="ledger-body"></tbody>
+            </table>
+        </div>
+    </section>
 </div>
 
-<section id="jobs-tab">
-    <table>
-        <thead><tr><th>ID</th><th>상태</th><th>시도</th><th>차감액</th><th>프롬프트</th><th>결과</th></tr></thead>
-        <tbody id="jobs-body"></tbody>
-    </table>
-</section>
-
-<section id="ledger-tab" class="hidden">
-    <table>
-        <thead><tr><th>ID</th><th>타입</th><th>금액</th><th>Job ID</th><th>시각</th></tr></thead>
-        <tbody id="ledger-body"></tbody>
-    </table>
-</section>
-
 <script>
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
 async function loadBalance() {
     const res = await fetch('/api/organizations/me/balance');
     const data = await res.json();
@@ -59,33 +72,35 @@ async function loadBalance() {
 async function loadJobs() {
     const res = await fetch('/api/jobs');
     const jobs = await res.json();
-    document.getElementById('jobs-body').innerHTML = jobs.map(job => `
+    document.getElementById('jobs-body').innerHTML = jobs.length ? jobs.map(job => `
         <tr>
             <td>${job.id}</td>
-            <td>${job.status}</td>
+            <td><span class="badge badge-${job.status.toLowerCase()}">${job.status}</span></td>
             <td>${job.attemptNo}</td>
             <td>${job.holdAmount}</td>
-            <td>${job.prompt}</td>
-            <td>${job.resultUrl ?? ''}</td>
-        </tr>`).join('');
+            <td>${escapeHtml(job.prompt)}</td>
+            <td>${escapeHtml(job.resultUrl ?? '')}</td>
+        </tr>`).join('') : '<tr><td class="empty" colspan="6">아직 생성 요청이 없습니다.</td></tr>';
 }
 
 async function loadLedger() {
     const res = await fetch('/api/ledger');
     const entries = await res.json();
-    document.getElementById('ledger-body').innerHTML = entries.map(entry => `
+    document.getElementById('ledger-body').innerHTML = entries.length ? entries.map(entry => `
         <tr>
             <td>${entry.id}</td>
             <td>${entry.type}</td>
             <td>${entry.amount}</td>
             <td>${entry.jobId ?? ''}</td>
             <td>${entry.createdAt}</td>
-        </tr>`).join('');
+        </tr>`).join('') : '<tr><td class="empty" colspan="5">아직 내역이 없습니다.</td></tr>';
 }
 
 function showTab(name) {
     document.getElementById('jobs-tab').classList.toggle('hidden', name !== 'jobs');
     document.getElementById('ledger-tab').classList.toggle('hidden', name !== 'ledger');
+    document.getElementById('tab-btn-jobs').classList.toggle('active', name === 'jobs');
+    document.getElementById('tab-btn-ledger').classList.toggle('active', name === 'ledger');
     if (name === 'ledger') {
         loadLedger();
     }
