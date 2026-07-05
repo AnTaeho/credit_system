@@ -6,7 +6,6 @@ import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.ledger.domain.LedgerEntry;
 import com.example.credit_system.ledger.domain.LedgerType;
 import com.example.credit_system.ledger.repository.LedgerRepository;
-import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,8 +18,6 @@ import java.time.Instant;
 @Service
 @RequiredArgsConstructor
 public class RefundService {
-
-    private static final int MAX_LOCK_RETRIES = 3;
 
     private final JobRepository jobRepository;
     private final OrganizationRepository organizationRepository;
@@ -35,21 +32,15 @@ public class RefundService {
             return;
         }
 
-        for (int attempt = 0; attempt < MAX_LOCK_RETRIES; attempt++) {
-            Organization organization = organizationRepository.findById(job.getOrganizationId())
-                    .orElseThrow(() -> new IllegalStateException("존재하지 않는 organization: " + job.getOrganizationId()));
-
-            int orgUpdated = organizationRepository.addBalance(
-                    job.getOrganizationId(), job.getHoldAmount(), organization.getVersion(), Instant.now());
-            if (orgUpdated == 1) {
-                ledgerRepository.save(LedgerEntry.of(job.getOrganizationId(), job.getId(), LedgerType.REFUND, job.getHoldAmount()));
-                log.info("최종 환불 완료: jobId={}, organizationId={}, amount={}",
-                        job.getId(), job.getOrganizationId(), job.getHoldAmount());
-                return;
-            }
-            log.info("환불 중 잔액 버전 충돌, 재시도: organizationId={}, attempt={}", job.getOrganizationId(), attempt);
+        int orgUpdated = organizationRepository.addBalance(
+                job.getOrganizationId(), job.getHoldAmount(), Instant.now());
+        if (orgUpdated == 1) {
+            ledgerRepository.save(LedgerEntry.of(job.getOrganizationId(), job.getId(), LedgerType.REFUND, job.getHoldAmount()));
+            log.info("최종 환불 완료: jobId={}, organizationId={}, amount={}",
+                    job.getId(), job.getOrganizationId(), job.getHoldAmount());
+            return;
         }
-        log.error("환불 잔액 반영이 반복 충돌로 실패함 - 운영 알림 필요: jobId={}, organizationId={}, amount={}",
-                job.getId(), job.getOrganizationId(), job.getHoldAmount());
+        throw new IllegalStateException("환불 잔액 반영 실패: organization이 존재하지 않음, jobId=" + job.getId()
+                + ", organizationId=" + job.getOrganizationId());
     }
 }

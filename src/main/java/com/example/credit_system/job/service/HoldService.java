@@ -1,7 +1,6 @@
 package com.example.credit_system.job.service;
 
 import com.example.credit_system.global.config.AppProperties;
-import com.example.credit_system.global.exception.BalanceConflictException;
 import com.example.credit_system.global.exception.DuplicateRequestInProgressException;
 import com.example.credit_system.global.exception.InsufficientBalanceException;
 import com.example.credit_system.job.domain.IdempotencyKey;
@@ -27,8 +26,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class HoldService {
 
-    private static final int MAX_LOCK_RETRIES = 3;
-
     private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final OrganizationRepository organizationRepository;
     private final JobRepository jobRepository;
@@ -51,6 +48,8 @@ public class HoldService {
         idempotencyKeyRepository.save(new IdempotencyKey(organizationId, idemKey));
 
         long cost = appProperties.generation().cost();
+
+        // TODO : 리팩토링 필요할듯 SRP
         Job job = deductBalanceAndCreateJob(organizationId, cost, prompt);
 
         idempotencyKeyRepository.attachJobId(organizationId, idemKey, job.getId());
@@ -70,21 +69,17 @@ public class HoldService {
     }
 
     private Job deductBalanceAndCreateJob(Long organizationId, long cost, String prompt) {
-        for (int attempt = 0; attempt < MAX_LOCK_RETRIES; attempt++) {
-            Organization organization = organizationRepository.findById(organizationId)
-                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));
 
-            if (organization.getBalance() < cost) {
-                throw new InsufficientBalanceException(organization.getBalance(), cost);
-            }
-
-            int updated = organizationRepository.deductBalance(
-                    organizationId, cost, organization.getVersion(), Instant.now());
-            if (updated == 1) {
-                return jobRepository.save(Job.hold(organizationId, cost, prompt));
-            }
-            log.info("잔액 차감 버전 충돌, 재시도: organizationId={}, attempt={}", organizationId, attempt);
+        if (organization.getBalance() < cost) {
+            throw new InsufficientBalanceException(organization.getBalance(), cost);
         }
-        throw new BalanceConflictException("잔액 갱신 충돌이 반복되어 요청을 처리할 수 없습니다.");
+
+        int updated = organizationRepository.deductBalance(organizationId, cost, Instant.now());
+        if (updated == 1) {
+            return jobRepository.save(Job.hold(organizationId, cost, prompt));
+        }
+        throw new InsufficientBalanceException(organization.getBalance(), cost);
     }
 }

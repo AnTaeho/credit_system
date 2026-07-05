@@ -21,15 +21,6 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void 잔액충돌_예외는_409와_코드를_반환한다() {
-        ResponseEntity<ErrorResponse> response =
-                handler.handleBalanceConflict(new BalanceConflictException("conflict"));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().code()).isEqualTo("BALANCE_CONFLICT");
-    }
-
-    @Test
     void 중복처리중_예외는_409와_코드를_반환한다() {
         ResponseEntity<ErrorResponse> response =
                 handler.handleDuplicateInProgress(new DuplicateRequestInProgressException());

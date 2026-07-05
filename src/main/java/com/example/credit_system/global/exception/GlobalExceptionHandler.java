@@ -16,11 +16,6 @@ public class GlobalExceptionHandler {
         return conflict("INSUFFICIENT_BALANCE", e.getMessage());
     }
 
-    @ExceptionHandler(BalanceConflictException.class)
-    public ResponseEntity<ErrorResponse> handleBalanceConflict(BalanceConflictException e) {
-        return conflict("BALANCE_CONFLICT", e.getMessage());
-    }
-
     @ExceptionHandler(DuplicateRequestInProgressException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateInProgress(DuplicateRequestInProgressException e) {
         return conflict("DUPLICATE_IN_PROGRESS", e.getMessage());

@@ -1,6 +1,5 @@
 package com.example.credit_system.job.concurrency;
 
-import com.example.credit_system.global.exception.BalanceConflictException;
 import com.example.credit_system.global.exception.InsufficientBalanceException;
 import com.example.credit_system.job.service.HoldService;
 import com.example.credit_system.organization.domain.Organization;
@@ -47,7 +46,8 @@ class ConcurrentHoldTest {
 
     @Test
     void 동시에_여러_요청이_들어와도_잔액이_음수가_되지_않는다() throws InterruptedException {
-        // app.generation.cost=100(테스트 프로파일 기본값), 잔액 500 → 최대 5건만 성공 가능
+        // app.generation.cost=100(테스트 프로파일 기본값), 잔액 500 → 조건부 UPDATE가 경합을 직렬화하므로
+        // 정확히 5건만 성공하고 나머지 5건은 잔액 부족으로 거절된다
         Organization organization = organizationRepository.save(new Organization("acme", 500L));
 
         int threadCount = 10;
@@ -66,7 +66,7 @@ class ConcurrentHoldTest {
                     start.await();
                     holdService.requestGeneration(organization.getId(), "concurrent-key-" + idx, "cat");
                     successCount.incrementAndGet();
-                } catch (InsufficientBalanceException | BalanceConflictException e) {
+                } catch (InsufficientBalanceException e) {
                     rejectedCount.incrementAndGet();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -82,10 +82,10 @@ class ConcurrentHoldTest {
         executor.shutdown();
 
         assertThat(successCount.get() + rejectedCount.get()).isEqualTo(threadCount);
-        assertThat(successCount.get()).isLessThanOrEqualTo(5);
+        assertThat(successCount.get()).isEqualTo(5);
+        assertThat(rejectedCount.get()).isEqualTo(5);
 
         Organization found = organizationRepository.findById(organization.getId()).orElseThrow();
-        assertThat(found.getBalance()).isGreaterThanOrEqualTo(0);
-        assertThat(found.getBalance()).isEqualTo(500L - successCount.get() * 100L);
+        assertThat(found.getBalance()).isEqualTo(0L);
     }
 }

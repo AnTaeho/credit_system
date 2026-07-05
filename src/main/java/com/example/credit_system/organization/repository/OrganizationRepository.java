@@ -14,21 +14,19 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     @Query("""
             UPDATE Organization o
             SET o.balance = o.balance - :amount, o.version = o.version + 1, o.updatedAt = :now
-            WHERE o.id = :id AND o.version = :expectedVersion
+            WHERE o.id = :id AND o.balance >= :amount
             """)
     int deductBalance(@Param("id") Long id,
                       @Param("amount") long amount,
-                      @Param("expectedVersion") long expectedVersion,
                       @Param("now") Instant now);
 
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Organization o
             SET o.balance = o.balance + :amount, o.version = o.version + 1, o.updatedAt = :now
-            WHERE o.id = :id AND o.version = :expectedVersion
+            WHERE o.id = :id
             """)
     int addBalance(@Param("id") Long id,
                    @Param("amount") long amount,
-                   @Param("expectedVersion") long expectedVersion,
                    @Param("now") Instant now);
 }
