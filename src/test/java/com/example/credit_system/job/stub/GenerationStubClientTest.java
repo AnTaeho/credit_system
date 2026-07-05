@@ -11,7 +11,7 @@ class GenerationStubClientTest {
     @Test
     void failureRate가_0이면_항상_성공하고_결과_URL을_반환한다() {
         GenerationStubClient client = new GenerationStubClient(
-                new AppProperties(null, new AppProperties.Stub(0.0, 0, 0), null, null));
+                new AppProperties(null, new AppProperties.Stub(0.0, 0, 0), null, null, null));
 
         String resultUrl = client.generate("a cat wearing sunglasses");
 
@@ -21,7 +21,7 @@ class GenerationStubClientTest {
     @Test
     void failureRate가_1이면_항상_실패한다() {
         GenerationStubClient client = new GenerationStubClient(
-                new AppProperties(null, new AppProperties.Stub(1.0, 0, 0), null, null));
+                new AppProperties(null, new AppProperties.Stub(1.0, 0, 0), null, null, null));
 
         assertThatThrownBy(() -> client.generate("a cat wearing sunglasses"))
                 .isInstanceOf(StubGenerationException.class);

@@ -74,4 +74,6 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     List<Job> findByStatusOrderByIdAsc(JobStatus status);
 
     List<Job> findByOrganizationIdOrderByIdDesc(Long organizationId);
+
+    List<Job> findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus status, Instant cutoff);
 }

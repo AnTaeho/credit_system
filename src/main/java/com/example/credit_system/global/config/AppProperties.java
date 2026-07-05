@@ -7,7 +7,8 @@ public record AppProperties(
         Generation generation,
         Stub stub,
         Heartbeat heartbeat,
-        Kafka kafka
+        Kafka kafka,
+        Holding holding
 ) {
 
     public record Generation(long cost, int maxAttempts) {
@@ -20,5 +21,8 @@ public record AppProperties(
     }
 
     public record Kafka(String topic) {
+    }
+
+    public record Holding(long timeoutSeconds) {
     }
 }

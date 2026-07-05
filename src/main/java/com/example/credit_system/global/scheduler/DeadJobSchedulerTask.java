@@ -31,8 +31,24 @@ public class DeadJobSchedulerTask {
         for (Long jobId : heartbeatRegistry.findExpiredJobIds()) {
             markExpiredAsFailed(jobId);
         }
+        reapStaleHolding();
         for (Job job : jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)) {
             process(job);
+        }
+    }
+
+    // outbox 발행 실패(브로커 장애 등)로 메시지가 유실되면 HOLDING에서 영구 정체될 수 있다.
+    // 일정 시간 이상 갱신되지 않은 HOLDING job을 FAILED로 되돌려 기존 FAILED 처리 루프가
+    // 재시도/환불을 이어받게 한다. status+attemptNo 이중 fencing으로, 그 사이 outbox가
+    // 뒤늦게 발행되어 컨슈머가 PROCESSING으로 이미 가져갔다면 이 전이는 무효(0행)가 된다.
+    private void reapStaleHolding() {
+        Instant cutoff = Instant.now().minusSeconds(appProperties.holding().timeoutSeconds());
+        for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.HOLDING, cutoff)) {
+            int updated = jobRepository.transitionIfStatusAndAttemptMatch(
+                    job.getId(), JobStatus.FAILED, JobStatus.HOLDING, job.getAttemptNo(), Instant.now());
+            if (updated == 1) {
+                log.info("HOLDING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
+            }
         }
     }
 

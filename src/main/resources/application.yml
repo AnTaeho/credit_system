@@ -46,6 +46,8 @@ app:
   heartbeat:
     timeout-seconds: 10
     refresh-interval-seconds: 5
+  holding:
+    timeout-seconds: 60
 
 logging:
   level:

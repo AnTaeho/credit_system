@@ -8,6 +8,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -85,5 +86,20 @@ class JobRepositoryTest {
         assertThat(afterFail).isEqualTo(1);
         assertThat(found.getStatus()).isEqualTo(JobStatus.PROCESSING);
         assertThat(found.getAttemptNo()).isEqualTo(1);
+    }
+
+    @Test
+    void updatedAt이_cutoff_이전인_HOLDING_job만_조회된다() {
+        Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        Instant staleUpdatedAt = Instant.now().minusSeconds(120);
+        jobRepository.updateStatusIfAttemptMatches(job.getId(), JobStatus.HOLDING, 0, staleUpdatedAt);
+
+        List<Job> caught = jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
+                JobStatus.HOLDING, Instant.now());
+        List<Job> notCaught = jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
+                JobStatus.HOLDING, Instant.now().minusSeconds(300));
+
+        assertThat(caught).extracting(Job::getId).containsExactly(job.getId());
+        assertThat(notCaught).isEmpty();
     }
 }
