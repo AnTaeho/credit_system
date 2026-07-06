@@ -1,5 +1,6 @@
 package com.example.credit_system.organization.domain;
 
+import com.example.credit_system.global.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -10,13 +11,11 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.Instant;
-
 @Entity
 @Getter
 @Table(name = "organizations")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Organization {
+public class Organization extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,18 +30,9 @@ public class Organization {
     @Column(nullable = false)
     private long version;
 
-    // TODO : BaseEntity로 추출
-    @Column(nullable = false)
-    private Instant createdAt;
-
-    @Column(nullable = false)
-    private Instant updatedAt;
-
     public Organization(String name, long balance) {
         this.name = name;
         this.balance = balance;
         this.version = 0L;
-        this.createdAt = Instant.now();
-        this.updatedAt = this.createdAt;
     }
 }

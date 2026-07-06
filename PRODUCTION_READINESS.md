@@ -74,7 +74,8 @@ PROCESSING 정체 감지)이 모두 해소됐다. "크레딧은 항상 정확히
 - `spring-boot-h2console` + H2 의존성이 MySQL 앱에 포함 — 프로덕션 빌드에서 제거.
 - Kafka 컨슈머 단일 스레드(파티션 1) — 처리량 스케일 및 `HeartbeatRegistry` 스레드풀(2)과
   동시성 상한 정합성 검토.
-- `idempotencyKeyRepository.attachJobId` 반환값 무시(`HoldService`) — 0 rows 무통과.
+- ~~`idempotencyKeyRepository.attachJobId` 반환값 무시(`HoldService`) — 0 rows 무통과~~ →
+  해결: 갱신 행 수가 1이 아니면 `IllegalStateException`으로 전체 롤백.
 - `charge`는 결제 검증 없이 임의 증액 가능 (설계상 PG 연동 유보 — demo 범위 OK).
 
 ---

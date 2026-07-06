@@ -1,5 +1,6 @@
 package com.example.credit_system.job.domain;
 
+import com.example.credit_system.global.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,13 +13,11 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.Instant;
-
 @Entity
 @Getter
 @Table(name = "jobs")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Job {
+public class Job extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -42,20 +41,12 @@ public class Job {
 
     private String resultUrl;
 
-    @Column(nullable = false)
-    private Instant createdAt;
-
-    @Column(nullable = false)
-    private Instant updatedAt;
-
     private Job(Long organizationId, long holdAmount, String prompt) {
         this.organizationId = organizationId;
         this.status = JobStatus.HOLDING;
         this.attemptNo = 0;
         this.holdAmount = holdAmount;
         this.prompt = prompt;
-        this.createdAt = Instant.now();
-        this.updatedAt = this.createdAt;
     }
 
     public static Job hold(Long organizationId, long holdAmount, String prompt) {

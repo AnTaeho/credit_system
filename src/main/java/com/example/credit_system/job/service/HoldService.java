@@ -49,10 +49,14 @@ public class HoldService {
 
         long cost = appProperties.generation().cost();
 
-        // TODO : 리팩토링 필요할듯 SRP
-        Job job = deductBalanceAndCreateJob(organizationId, cost, prompt);
+        deductBalance(organizationId, cost);
+        Job job = jobRepository.save(Job.hold(organizationId, cost, prompt));
 
-        idempotencyKeyRepository.attachJobId(organizationId, idemKey, job.getId());
+        int attached = idempotencyKeyRepository.attachJobId(organizationId, idemKey, job.getId());
+        if (attached != 1) {
+            throw new IllegalStateException("idempotency key에 jobId 연결 실패: organizationId=" + organizationId
+                    + ", idemKey=" + idemKey + ", jobId=" + job.getId());
+        }
         ledgerRepository.save(LedgerEntry.of(organizationId, job.getId(), LedgerType.HOLD, -cost));
         outboxWriter.write(job.getId(), organizationId, job.getAttemptNo(), prompt);
 
@@ -68,7 +72,7 @@ public class HoldService {
         return new HoldResult(existing.getJobId(), true);
     }
 
-    private Job deductBalanceAndCreateJob(Long organizationId, long cost, String prompt) {
+    private void deductBalance(Long organizationId, long cost) {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));
 
@@ -77,9 +81,8 @@ public class HoldService {
         }
 
         int updated = organizationRepository.deductBalance(organizationId, cost, Instant.now());
-        if (updated == 1) {
-            return jobRepository.save(Job.hold(organizationId, cost, prompt));
+        if (updated != 1) {
+            throw new InsufficientBalanceException(organization.getBalance(), cost);
         }
-        throw new InsufficientBalanceException(organization.getBalance(), cost);
     }
 }
