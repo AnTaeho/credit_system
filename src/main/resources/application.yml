@@ -36,6 +36,7 @@ app:
     enabled: true
   kafka:
     topic: generation-jobs
+    partitions: 3
   generation:
     cost: 100
     max-attempts: 3

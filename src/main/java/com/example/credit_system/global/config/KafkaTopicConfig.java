@@ -17,7 +17,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic generationJobsTopic() {
         return TopicBuilder.name(appProperties.kafka().topic())
-                .partitions(3)
+                .partitions(appProperties.kafka().partitions())
                 .replicas(1)
                 .build();
     }
@@ -27,7 +27,7 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic generationJobsDeadLetterTopic() {
         return TopicBuilder.name(appProperties.kafka().topic() + ".DLT")
-                .partitions(3)
+                .partitions(appProperties.kafka().partitions())
                 .replicas(1)
                 .build();
     }

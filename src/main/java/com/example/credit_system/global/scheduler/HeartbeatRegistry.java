@@ -2,7 +2,6 @@ package com.example.credit_system.global.scheduler;
 
 import com.example.credit_system.global.config.AppProperties;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -15,14 +14,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Component
-@RequiredArgsConstructor
 public class HeartbeatRegistry {
 
     private static final String KEY = "heartbeats";
 
     private final StringRedisTemplate redisTemplate;
     private final AppProperties appProperties;
-    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
+    private final ScheduledExecutorService executor;
+
+    public HeartbeatRegistry(StringRedisTemplate redisTemplate, AppProperties appProperties) {
+        this.redisTemplate = redisTemplate;
+        this.appProperties = appProperties;
+        // 동시 heartbeat 태스크 수의 상한은 컨슈머 동시성(=파티션 수)이므로 풀 크기를 이에 맞춘다.
+        this.executor = Executors.newScheduledThreadPool(appProperties.kafka().partitions());
+    }
 
     public ScheduledFuture<?> startHeartbeat(Long jobId) {
         touch(jobId);

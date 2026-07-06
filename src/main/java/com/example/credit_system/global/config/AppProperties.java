@@ -21,7 +21,7 @@ public record AppProperties(
     public record Heartbeat(long timeoutSeconds, long refreshIntervalSeconds) {
     }
 
-    public record Kafka(String topic) {
+    public record Kafka(String topic, int partitions) {
     }
 
     public record Holding(long timeoutSeconds) {

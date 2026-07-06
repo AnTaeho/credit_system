@@ -34,7 +34,7 @@ class OutboxRelayUnitTest {
     @BeforeEach
     void setUp() {
         AppProperties appProperties = new AppProperties(
-                null, null, null, new AppProperties.Kafka("generation-jobs"), null, null);
+                null, null, null, new AppProperties.Kafka("generation-jobs", 1), null, null);
         outboxRelay = new OutboxRelay(outboxRepository, kafkaTemplate, appProperties);
     }
 
