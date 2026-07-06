@@ -3,8 +3,8 @@ spring:
     name: credit_system
   datasource:
     url: jdbc:mysql://localhost:3306/credit_system
-    username: credit
-    password: credit
+    username: root
+    password: an902318
   jpa:
     hibernate:
       ddl-auto: update
