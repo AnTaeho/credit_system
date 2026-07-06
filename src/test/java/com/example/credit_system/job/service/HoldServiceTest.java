@@ -36,7 +36,7 @@ class HoldServiceTest {
     void setUp() {
         organization = organizationRepository.save(new Organization("acme", 1000L));
         AppProperties appProperties = new AppProperties(
-                new AppProperties.Generation(100L, 3), null, null, null, null);
+                new AppProperties.Generation(100L, 3), null, null, null, null, null);
         OutboxWriter outboxWriter = new OutboxWriter(outboxRepository, new ObjectMapper());
         holdService = new HoldService(idempotencyKeyRepository, organizationRepository,
                 jobRepository, ledgerRepository, outboxWriter, appProperties);

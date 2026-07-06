@@ -49,6 +49,11 @@ public class HeartbeatRegistry {
         redisTemplate.opsForZSet().add(KEY, jobId.toString(), expireAt);
     }
 
+    public boolean hasLiveHeartbeat(Long jobId) {
+        Double score = redisTemplate.opsForZSet().score(KEY, jobId.toString());
+        return score != null && score > Instant.now().getEpochSecond();
+    }
+
     public void remove(Long jobId) {
         redisTemplate.opsForZSet().remove(KEY, jobId.toString());
     }

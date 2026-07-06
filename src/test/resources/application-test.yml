@@ -37,3 +37,5 @@ app:
     refresh-interval-seconds: 5
   holding:
     timeout-seconds: 60
+  processing:
+    timeout-seconds: 60

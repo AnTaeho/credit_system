@@ -32,6 +32,7 @@ public class DeadJobSchedulerTask {
             markExpiredAsFailed(jobId);
         }
         reapStaleHolding();
+        reapStaleProcessing();
         for (Job job : jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)) {
             process(job);
         }
@@ -48,6 +49,29 @@ public class DeadJobSchedulerTask {
                     job.getId(), JobStatus.FAILED, JobStatus.HOLDING, job.getAttemptNo(), Instant.now());
             if (updated == 1) {
                 log.info("HOLDING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
+            }
+        }
+    }
+
+    // PROCESSING 진입 직후 heartbeat 등록 전에 워커가 크래시하거나, 등록 후 Redis 데이터가
+    // 유실되거나, DLT(Dead Letter Topic)로 격리된 메시지의 job이 PROCESSING에 남는 경우
+    // 스케줄러의 heartbeat 만료 감지(findExpiredJobIds)로는 회수할 수 없다. 이를 보완해
+    // 일정 시간 이상 갱신되지 않은 PROCESSING job 중 Redis에 살아있는 heartbeat가 없는
+    // 것만 FAILED로 되돌린다. status+attemptNo 이중 fencing 덕에, 실제로는 워커가 정상
+    // 동작 중인데 오탐(hasLiveHeartbeat 조회 시점의 간극 등)이 나더라도 이후 retry가
+    // attemptNo를 증가시키므로 옛 워커의 최종 confirm(complete/updateStatusIfAttemptMatches)은
+    // attemptNo 불일치로 0행이 되어 무효화되어 안전하다.
+    private void reapStaleProcessing() {
+        Instant cutoff = Instant.now().minusSeconds(appProperties.processing().timeoutSeconds());
+        for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.PROCESSING, cutoff)) {
+            if (heartbeatRegistry.hasLiveHeartbeat(job.getId())) {
+                continue;
+            }
+            int updated = jobRepository.transitionIfStatusAndAttemptMatch(
+                    job.getId(), JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
+            if (updated == 1) {
+                heartbeatRegistry.remove(job.getId());
+                log.info("PROCESSING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
             }
         }
     }
