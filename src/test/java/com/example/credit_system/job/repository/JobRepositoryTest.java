@@ -130,7 +130,7 @@ class JobRepositoryTest {
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(afterFail).isEqualTo(1);
-        assertThat(found.getStatus()).isEqualTo(JobStatus.PROCESSING);
+        assertThat(found.getStatus()).isEqualTo(JobStatus.HOLDING);
         assertThat(found.getAttemptNo()).isEqualTo(1);
     }
 

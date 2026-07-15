@@ -18,7 +18,7 @@ class OrganizationRepositoryTest {
     OrganizationRepository organizationRepository;
 
     @Test
-    void 잔액이_충분하면_차감되고_버전이_증가한다() {
+    void 잔액이_충분하면_차감된다() {
         Organization org = organizationRepository.save(new Organization("acme", 1000L));
 
         int updated = organizationRepository.deductBalance(org.getId(), 300L, Instant.now());
@@ -27,7 +27,6 @@ class OrganizationRepositoryTest {
         Organization found = organizationRepository.findById(org.getId()).orElseThrow();
         assertThat(updated).isEqualTo(1);
         assertThat(found.getBalance()).isEqualTo(700L);
-        assertThat(found.getVersion()).isEqualTo(1L);
     }
 
     @Test
@@ -39,11 +38,10 @@ class OrganizationRepositoryTest {
         Organization found = organizationRepository.findById(org.getId()).orElseThrow();
         assertThat(updated).isZero();
         assertThat(found.getBalance()).isEqualTo(100L);
-        assertThat(found.getVersion()).isZero();
     }
 
     @Test
-    void 환불은_잔액을_되돌리고_버전을_증가시킨다() {
+    void 환불은_잔액을_되돌린다() {
         Organization org = organizationRepository.save(new Organization("acme", 700L));
 
         int updated = organizationRepository.addBalance(org.getId(), 300L, Instant.now());
@@ -51,6 +49,5 @@ class OrganizationRepositoryTest {
         Organization found = organizationRepository.findById(org.getId()).orElseThrow();
         assertThat(updated).isEqualTo(1);
         assertThat(found.getBalance()).isEqualTo(1000L);
-        assertThat(found.getVersion()).isEqualTo(1L);
     }
 }

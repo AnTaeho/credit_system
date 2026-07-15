@@ -19,4 +19,7 @@ public interface OutboxRepository extends JpaRepository<OutboxEntry, Long> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE OutboxEntry o SET o.sent = true WHERE o.id = :id")
     int markSent(@Param("id") Long id);
+
+    /** 해당 작업의 미발송 outbox 항목이 존재하는지 확인한다. */
+    boolean existsByJobIdAndSentFalse(Long jobId);
 }

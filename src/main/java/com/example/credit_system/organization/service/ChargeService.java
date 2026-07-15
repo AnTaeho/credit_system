@@ -17,6 +17,8 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class ChargeService {
 
+    private static final long MAX_CHARGE_AMOUNT = 1_000_000L;
+
     private final OrganizationRepository organizationRepository;
     private final LedgerRepository ledgerRepository;
 
@@ -25,6 +27,9 @@ public class ChargeService {
     public void charge(Long organizationId, long amount) {
         if (amount <= 0) {
             throw new InvalidRequestException("amount는 0보다 커야 합니다.");
+        }
+        if (amount > MAX_CHARGE_AMOUNT) {
+            throw new InvalidRequestException("amount는 1,000,000을 초과할 수 없습니다.");
         }
         int updated = organizationRepository.addBalance(organizationId, amount, Instant.now());
         if (updated == 1) {

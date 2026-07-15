@@ -72,7 +72,7 @@ class RetryRefundTest {
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             var job = jobRepository.findById(result.jobId()).orElseThrow();
             assertThat(job.getStatus()).isEqualTo(JobStatus.REFUNDED);
-            assertThat(job.getAttemptNo()).isEqualTo(3);
+            assertThat(job.getAttemptNo()).isEqualTo(2);
         });
 
         Organization found = organizationRepository.findById(organization.getId()).orElseThrow();

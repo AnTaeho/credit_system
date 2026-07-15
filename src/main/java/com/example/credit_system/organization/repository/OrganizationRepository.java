@@ -14,7 +14,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Organization o
-            SET o.balance = o.balance - :amount, o.version = o.version + 1, o.updatedAt = :now
+            SET o.balance = o.balance - :amount, o.updatedAt = :now
             WHERE o.id = :id AND o.balance >= :amount
             """)
     int deductBalance(@Param("id") Long id,
@@ -25,7 +25,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Organization o
-            SET o.balance = o.balance + :amount, o.version = o.version + 1, o.updatedAt = :now
+            SET o.balance = o.balance + :amount, o.updatedAt = :now
             WHERE o.id = :id
             """)
     int addBalance(@Param("id") Long id,

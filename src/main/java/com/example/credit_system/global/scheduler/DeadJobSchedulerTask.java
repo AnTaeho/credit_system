@@ -6,6 +6,7 @@ import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.job.service.RefundService;
 import com.example.credit_system.job.service.RetryService;
+import com.example.credit_system.outbox.repository.OutboxRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,6 +23,7 @@ public class DeadJobSchedulerTask {
 
     private final HeartbeatRegistry heartbeatRegistry;
     private final JobRepository jobRepository;
+    private final OutboxRepository outboxRepository;
     private final RetryService retryService;
     private final RefundService refundService;
     private final AppProperties appProperties;
@@ -43,6 +45,9 @@ public class DeadJobSchedulerTask {
     private void reapStaleHolding() {
         Instant cutoff = Instant.now().minusSeconds(appProperties.holding().timeoutSeconds());
         for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.HOLDING, cutoff)) {
+            if (outboxRepository.existsByJobIdAndSentFalse(job.getId())) {
+                continue;
+            }
             int updated = jobRepository.transitionIfStatusAndAttemptMatch(
                     job.getId(), JobStatus.FAILED, JobStatus.HOLDING, job.getAttemptNo(), Instant.now());
             if (updated == 1) {
@@ -69,14 +74,14 @@ public class DeadJobSchedulerTask {
 
     /** heartbeat가 만료된 작업을 실패 상태로 변경한다. */
     private void markExpiredAsFailed(Long jobId) {
-        jobRepository.findById(jobId).ifPresent(job -> {
+        jobRepository.findById(jobId).ifPresentOrElse(job -> {
             int updated = jobRepository.transitionIfStatusAndAttemptMatch(
                     jobId, JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
             if (updated == 1) {
-                heartbeatRegistry.remove(jobId);
                 log.info("heartbeat 만료로 FAILED 전이: jobId={}, attemptNo={}", jobId, job.getAttemptNo());
             }
-        });
+            heartbeatRegistry.remove(jobId);
+        }, () -> heartbeatRegistry.remove(jobId));
     }
 
     /** 최신 실패 상태를 확인해 재시도 또는 환불을 수행한다. */
@@ -85,7 +90,7 @@ public class DeadJobSchedulerTask {
         if (current == null || current.getStatus() != JobStatus.FAILED) {
             return;
         }
-        if (current.getAttemptNo() < appProperties.generation().maxAttempts()) {
+        if (current.getAttemptNo() + 1 < appProperties.generation().maxAttempts()) {
             retryService.retry(current);
         } else {
             refundService.finalRefund(current);

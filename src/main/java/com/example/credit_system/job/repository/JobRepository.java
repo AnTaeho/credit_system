@@ -61,13 +61,13 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                           @Param("attemptNo") int attemptNo,
                                           @Param("now") Instant now);
 
-    /** 실패 작업의 시도 번호를 높이고 처리 상태로 변경한다. */
+    /** 실패 작업의 시도 번호를 높이고 대기 상태로 변경한다. */
     @Transactional
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Job j
             SET j.attemptNo = j.attemptNo + 1,
-                j.status = com.example.credit_system.job.domain.JobStatus.PROCESSING,
+                j.status = com.example.credit_system.job.domain.JobStatus.HOLDING,
                 j.updatedAt = :now
             WHERE j.id = :jobId
               AND j.status = com.example.credit_system.job.domain.JobStatus.FAILED

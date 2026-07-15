@@ -40,7 +40,7 @@ class RetryServiceTest {
         retryService.retry(jobRepository.findById(job.getId()).orElseThrow());
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
-        assertThat(found.getStatus()).isEqualTo(JobStatus.PROCESSING);
+        assertThat(found.getStatus()).isEqualTo(JobStatus.HOLDING);
         assertThat(found.getAttemptNo()).isEqualTo(1);
         assertThat(outboxRepository.findBySentFalseOrderByIdAsc()).hasSize(1);
     }

@@ -18,6 +18,9 @@ import java.time.Instant;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OutboxEntry {
 
+    /** payload 컬럼에 저장 가능한 최대 길이(JSON 이스케이프 후 기준). */
+    public static final int MAX_PAYLOAD_LENGTH = 8000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -25,7 +28,7 @@ public class OutboxEntry {
     @Column(nullable = false)
     private Long jobId;
 
-    @Column(nullable = false, length = 2000)
+    @Column(nullable = false, length = MAX_PAYLOAD_LENGTH)
     private String payload;
 
     @Column(nullable = false)

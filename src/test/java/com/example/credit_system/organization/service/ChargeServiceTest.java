@@ -51,4 +51,17 @@ class ChargeServiceTest {
                 .isEqualTo(500L);
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
     }
+
+    @Test
+    void 충전_금액이_상한을_초과하면_거부한다() {
+        Organization organization = organizationRepository.save(new Organization("acme", 500L));
+
+        assertThatThrownBy(() -> chargeService.charge(organization.getId(), 1_000_001L))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("amount는 1,000,000을 초과할 수 없습니다.");
+
+        assertThat(organizationRepository.findById(organization.getId()).orElseThrow().getBalance())
+                .isEqualTo(500L);
+        assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
+    }
 }
