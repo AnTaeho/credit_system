@@ -70,8 +70,8 @@ public class DeadJobSchedulerTask {
     /** heartbeat가 만료된 작업을 실패 상태로 변경한다. */
     private void markExpiredAsFailed(Long jobId) {
         jobRepository.findById(jobId).ifPresent(job -> {
-            int updated = jobRepository.updateStatusIfAttemptMatches(
-                    jobId, JobStatus.FAILED, job.getAttemptNo(), Instant.now());
+            int updated = jobRepository.transitionIfStatusAndAttemptMatch(
+                    jobId, JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
             if (updated == 1) {
                 heartbeatRegistry.remove(jobId);
                 log.info("heartbeat 만료로 FAILED 전이: jobId={}, attemptNo={}", jobId, job.getAttemptNo());

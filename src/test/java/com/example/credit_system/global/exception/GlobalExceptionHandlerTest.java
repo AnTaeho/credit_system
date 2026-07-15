@@ -37,4 +37,14 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().code()).isEqualTo("DUPLICATE_IN_PROGRESS");
     }
+
+    @Test
+    void 잘못된_요청은_400과_코드를_반환한다() {
+        ResponseEntity<ErrorResponse> response =
+                handler.handleInvalidRequest(new InvalidRequestException("잘못된 요청"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().code()).isEqualTo("INVALID_REQUEST");
+        assertThat(response.getBody().message()).isEqualTo("잘못된 요청");
+    }
 }

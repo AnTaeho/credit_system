@@ -35,7 +35,8 @@ class RefundServiceTest {
     void FAILED_job은_REFUNDED로_전이되고_잔액이_복구된다() {
         Organization organization = organizationRepository.save(new Organization("acme", 700L));
         Job job = jobRepository.save(Job.hold(organization.getId(), 300L, "cat"));
-        jobRepository.updateStatusIfAttemptMatches(job.getId(), JobStatus.FAILED, 0, Instant.now());
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
 
         refundService.finalRefund(jobRepository.findById(job.getId()).orElseThrow());
 

@@ -1,14 +1,12 @@
 package com.example.credit_system.organization.controller;
 
 import com.example.credit_system.global.auth.SessionConst;
-import com.example.credit_system.global.exception.ErrorResponse;
 import com.example.credit_system.organization.dto.BalanceResponse;
 import com.example.credit_system.organization.dto.ChargeRequest;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
 import com.example.credit_system.organization.service.ChargeService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -33,13 +31,10 @@ public class OrganizationApiController {
 
     /** 로그인 조직의 잔액을 충전한다. */
     @PostMapping("/me/charge")
-    public ResponseEntity<?> charge(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId,
-                                     @RequestBody ChargeRequest request) {
-        if (request.amount() <= 0) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", "amount는 0보다 커야 합니다."));
-        }
+    public BalanceResponse charge(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId,
+                                  @RequestBody ChargeRequest request) {
         chargeService.charge(organizationId, request.amount());
         Organization organization = organizationRepository.findById(organizationId).orElseThrow();
-        return ResponseEntity.ok(new BalanceResponse(organization.getBalance()));
+        return new BalanceResponse(organization.getBalance());
     }
 }

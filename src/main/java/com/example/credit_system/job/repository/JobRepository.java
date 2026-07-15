@@ -13,18 +13,23 @@ import java.util.List;
 
 public interface JobRepository extends JpaRepository<Job, Long> {
 
-    /** 시도 번호가 일치하는 작업의 상태를 원자적으로 변경한다. */
+    /** 유효한 대기·처리 작업을 처리 상태로 선점한다. */
     @Transactional
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Job j
-            SET j.status = :status, j.updatedAt = :now
-            WHERE j.id = :jobId AND j.attemptNo = :attemptNo
+            SET j.status = com.example.credit_system.job.domain.JobStatus.PROCESSING,
+                j.updatedAt = :now
+            WHERE j.id = :jobId
+              AND j.status IN (
+                  com.example.credit_system.job.domain.JobStatus.HOLDING,
+                  com.example.credit_system.job.domain.JobStatus.PROCESSING
+              )
+              AND j.attemptNo = :attemptNo
             """)
-    int updateStatusIfAttemptMatches(@Param("jobId") Long jobId,
-                                     @Param("status") JobStatus status,
-                                     @Param("attemptNo") int attemptNo,
-                                     @Param("now") Instant now);
+    int startProcessingIfAttemptMatches(@Param("jobId") Long jobId,
+                                        @Param("attemptNo") int attemptNo,
+                                        @Param("now") Instant now);
 
     /** 시도 번호가 일치하는 작업을 완료 처리한다. */
     @Transactional
@@ -33,7 +38,9 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             UPDATE Job j
             SET j.status = com.example.credit_system.job.domain.JobStatus.COMPLETED,
                 j.resultUrl = :resultUrl, j.updatedAt = :now
-            WHERE j.id = :jobId AND j.attemptNo = :attemptNo
+            WHERE j.id = :jobId
+              AND j.status = com.example.credit_system.job.domain.JobStatus.PROCESSING
+              AND j.attemptNo = :attemptNo
             """)
     int completeIfAttemptMatches(@Param("jobId") Long jobId,
                                  @Param("resultUrl") String resultUrl,

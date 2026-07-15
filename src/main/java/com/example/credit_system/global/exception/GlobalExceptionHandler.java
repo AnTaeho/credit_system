@@ -23,6 +23,12 @@ public class GlobalExceptionHandler {
         return conflict("DUPLICATE_IN_PROGRESS", e.getMessage());
     }
 
+    /** 잘못된 요청을 400 응답으로 변환한다. */
+    @ExceptionHandler(InvalidRequestException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRequest(InvalidRequestException e) {
+        return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", e.getMessage()));
+    }
+
     /** 동시 중복 삽입 충돌을 중복 요청 응답으로 변환한다. */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException e) {

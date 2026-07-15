@@ -3,6 +3,7 @@ package com.example.credit_system.job.service;
 import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.global.exception.DuplicateRequestInProgressException;
 import com.example.credit_system.global.exception.InsufficientBalanceException;
+import com.example.credit_system.global.exception.InvalidRequestException;
 import com.example.credit_system.job.domain.IdempotencyKey;
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.repository.IdempotencyKeyRepository;
@@ -36,6 +37,8 @@ public class HoldService {
     /** 멱등성을 보장하며 비용을 차감하고 생성 작업을 등록한다. */
     @Transactional
     public HoldResult requestGeneration(Long organizationId, String idemKey, String prompt) {
+        validateRequest(idemKey, prompt);
+
         Optional<IdempotencyKey> existing = idempotencyKeyRepository
                 .findByOrganizationIdAndIdemKey(organizationId, idemKey);
         if (existing.isPresent()) {
@@ -61,6 +64,22 @@ public class HoldService {
         return new HoldResult(job.getId(), false);
     }
 
+    /** 생성 요청 값이 저장 가능한 범위인지 검증한다. */
+    private void validateRequest(String idemKey, String prompt) {
+        if (idemKey == null || idemKey.isBlank()) {
+            throw new InvalidRequestException("idemKey는 필수입니다.");
+        }
+        if (idemKey.length() > 100) {
+            throw new InvalidRequestException("idemKey는 100자를 초과할 수 없습니다.");
+        }
+        if (prompt == null || prompt.isBlank()) {
+            throw new InvalidRequestException("prompt는 필수입니다.");
+        }
+        if (prompt.length() > 1000) {
+            throw new InvalidRequestException("prompt는 1000자를 초과할 수 없습니다.");
+        }
+    }
+
     /** 기존 멱등 키를 중복 요청 결과로 변환한다. */
     private HoldResult toDuplicateResult(IdempotencyKey existing) {
         if (existing.getJobId() == null) {
@@ -72,16 +91,13 @@ public class HoldService {
 
     /** 잔액이 충분하면 비용을 원자적으로 차감한다. */
     private void deductBalance(Long organizationId, long cost) {
+        int updated = organizationRepository.deductBalance(organizationId, cost, Instant.now());
+        if (updated == 1) {
+            return;
+        }
+
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));
-
-        if (organization.getBalance() < cost) {
-            throw new InsufficientBalanceException(organization.getBalance(), cost);
-        }
-
-        int updated = organizationRepository.deductBalance(organizationId, cost, Instant.now());
-        if (updated != 1) {
-            throw new InsufficientBalanceException(organization.getBalance(), cost);
-        }
+        throw new InsufficientBalanceException(organization.getBalance(), cost);
     }
 }

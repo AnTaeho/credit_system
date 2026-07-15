@@ -27,6 +27,7 @@ class FailureServiceTest {
     @Test
     void attemptNo가_일치하면_FAILED로_전이한다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
 
         failureService.markFailed(job.getId(), 0);
 
@@ -36,9 +37,23 @@ class FailureServiceTest {
     @Test
     void attemptNo가_불일치하면_전이하지_않는다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
 
         failureService.markFailed(job.getId(), 9);
 
-        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.HOLDING);
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.PROCESSING);
+    }
+
+    @Test
+    void 완료된_작업의_늦은_실패는_무시한다() {
+        Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
+        jobRepository.completeIfAttemptMatches(
+                job.getId(), "https://stub/done.png", 0, java.time.Instant.now());
+
+        failureService.markFailed(job.getId(), 0);
+
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus())
+                .isEqualTo(JobStatus.COMPLETED);
     }
 }

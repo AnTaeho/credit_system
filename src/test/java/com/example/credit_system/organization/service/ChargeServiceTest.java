@@ -1,5 +1,6 @@
 package com.example.credit_system.organization.service;
 
+import com.example.credit_system.global.exception.InvalidRequestException;
 import com.example.credit_system.ledger.repository.LedgerRepository;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
@@ -10,6 +11,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ActiveProfiles("test")
 @DataJpaTest
@@ -35,5 +37,18 @@ class ChargeServiceTest {
         assertThat(found.getBalance()).isEqualTo(800L);
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId()))
                 .anyMatch(entry -> entry.getType().name().equals("CHARGE"));
+    }
+
+    @Test
+    void 충전_금액이_0_이하면_거부한다() {
+        Organization organization = organizationRepository.save(new Organization("acme", 500L));
+
+        assertThatThrownBy(() -> chargeService.charge(organization.getId(), 0L))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("amount는 0보다 커야 합니다.");
+
+        assertThat(organizationRepository.findById(organization.getId()).orElseThrow().getBalance())
+                .isEqualTo(500L);
+        assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
     }
 }

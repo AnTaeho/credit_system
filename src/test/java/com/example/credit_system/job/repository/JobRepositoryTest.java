@@ -20,11 +20,10 @@ class JobRepositoryTest {
     JobRepository jobRepository;
 
     @Test
-    void attemptNo가_일치하면_상태가_변경된다() {
+    void 대기_작업은_attemptNo가_일치하면_처리_상태로_전이된다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
 
-        int updated = jobRepository.updateStatusIfAttemptMatches(
-                job.getId(), JobStatus.PROCESSING, 0, Instant.now());
+        int updated = jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, Instant.now());
 
         assertThat(updated).isEqualTo(1);
         assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus())
@@ -35,8 +34,7 @@ class JobRepositoryTest {
     void attemptNo가_불일치하면_0행이며_상태가_유지된다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
 
-        int updated = jobRepository.updateStatusIfAttemptMatches(
-                job.getId(), JobStatus.PROCESSING, 5, Instant.now());
+        int updated = jobRepository.startProcessingIfAttemptMatches(job.getId(), 5, Instant.now());
 
         assertThat(updated).isZero();
         assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus())
@@ -44,8 +42,23 @@ class JobRepositoryTest {
     }
 
     @Test
+    void 재시도에서_미리_PROCESSING된_작업도_같은_attemptNo면_처리할_수_있다() {
+        Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
+        jobRepository.incrementAttemptForRetry(job.getId(), 0, Instant.now());
+
+        int updated = jobRepository.startProcessingIfAttemptMatches(job.getId(), 1, Instant.now());
+
+        assertThat(updated).isEqualTo(1);
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus())
+                .isEqualTo(JobStatus.PROCESSING);
+    }
+
+    @Test
     void 완료전이는_resultUrl을_함께_기록한다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, Instant.now());
 
         int updated = jobRepository.completeIfAttemptMatches(
                 job.getId(), "https://stub/image/1.png", 0, Instant.now());
@@ -57,9 +70,41 @@ class JobRepositoryTest {
     }
 
     @Test
+    void 환불된_작업은_같은_attemptNo로_완료할_수_없다() {
+        Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.REFUNDED, JobStatus.FAILED, 0, Instant.now());
+
+        int updated = jobRepository.completeIfAttemptMatches(
+                job.getId(), "https://stub/image/late.png", 0, Instant.now());
+
+        Job found = jobRepository.findById(job.getId()).orElseThrow();
+        assertThat(updated).isZero();
+        assertThat(found.getStatus()).isEqualTo(JobStatus.REFUNDED);
+        assertThat(found.getResultUrl()).isNull();
+    }
+
+    @Test
+    void 종결된_작업은_같은_attemptNo로_처리를_다시_시작할_수_없다() {
+        Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, Instant.now());
+        jobRepository.completeIfAttemptMatches(
+                job.getId(), "https://stub/image/done.png", 0, Instant.now());
+
+        int updated = jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, Instant.now());
+
+        assertThat(updated).isZero();
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus())
+                .isEqualTo(JobStatus.COMPLETED);
+    }
+
+    @Test
     void 상태와_attemptNo가_모두_일치할_때만_전이된다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
-        jobRepository.updateStatusIfAttemptMatches(job.getId(), JobStatus.FAILED, 0, Instant.now());
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
 
         int wrongStatus = jobRepository.transitionIfStatusAndAttemptMatch(
                 job.getId(), JobStatus.REFUNDED, JobStatus.COMPLETED, 0, Instant.now());
@@ -79,7 +124,8 @@ class JobRepositoryTest {
         int beforeFail = jobRepository.incrementAttemptForRetry(job.getId(), 0, Instant.now());
         assertThat(beforeFail).isZero();
 
-        jobRepository.updateStatusIfAttemptMatches(job.getId(), JobStatus.FAILED, 0, Instant.now());
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
         int afterFail = jobRepository.incrementAttemptForRetry(job.getId(), 0, Instant.now());
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
@@ -92,7 +138,8 @@ class JobRepositoryTest {
     void updatedAt이_cutoff_이전인_HOLDING_job만_조회된다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
         Instant staleUpdatedAt = Instant.now().minusSeconds(120);
-        jobRepository.updateStatusIfAttemptMatches(job.getId(), JobStatus.HOLDING, 0, staleUpdatedAt);
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.HOLDING, JobStatus.HOLDING, 0, staleUpdatedAt);
 
         List<Job> caught = jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
                 JobStatus.HOLDING, Instant.now());

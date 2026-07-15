@@ -1,7 +1,6 @@
 package com.example.credit_system.job.worker;
 
 import com.example.credit_system.global.scheduler.HeartbeatRegistry;
-import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.job.service.ConfirmService;
 import com.example.credit_system.job.service.FailureService;
@@ -36,8 +35,8 @@ public class GenerationWorker {
     public void consume(String payload) {
         GenerationJobMessage message = objectMapper.readValue(payload, GenerationJobMessage.class);
 
-        int updated = jobRepository.updateStatusIfAttemptMatches(
-                message.jobId(), JobStatus.PROCESSING, message.attemptNo(), Instant.now());
+        int updated = jobRepository.startProcessingIfAttemptMatches(
+                message.jobId(), message.attemptNo(), Instant.now());
         if (updated == 0) {
             log.info("무효한 메시지 무시: jobId={}, attemptNo={}", message.jobId(), message.attemptNo());
             return;

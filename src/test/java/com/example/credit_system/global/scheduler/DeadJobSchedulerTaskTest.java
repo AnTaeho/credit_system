@@ -15,6 +15,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -126,5 +127,21 @@ class DeadJobSchedulerTaskTest {
 
         verify(jobRepository, never()).transitionIfStatusAndAttemptMatch(
                 eq(21L), eq(JobStatus.FAILED), eq(JobStatus.PROCESSING), anyInt(), any(Instant.class));
+    }
+
+    @Test
+    void 만료된_heartbeat는_PROCESSING_작업만_FAILED로_전이한다() {
+        Job job = staleProcessingJob(30L);
+        when(heartbeatRegistry.findExpiredJobIds()).thenReturn(Set.of(30L));
+        when(jobRepository.findById(30L)).thenReturn(Optional.of(job));
+        when(jobRepository.transitionIfStatusAndAttemptMatch(
+                eq(30L), eq(JobStatus.FAILED), eq(JobStatus.PROCESSING), eq(0), any(Instant.class)))
+                .thenReturn(1);
+
+        task.scan();
+
+        verify(jobRepository).transitionIfStatusAndAttemptMatch(
+                eq(30L), eq(JobStatus.FAILED), eq(JobStatus.PROCESSING), eq(0), any(Instant.class));
+        verify(heartbeatRegistry).remove(30L);
     }
 }

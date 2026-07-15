@@ -34,7 +34,8 @@ class RetryServiceTest {
     @Test
     void FAILED_상태의_job은_attemptNo가_증가하고_outbox가_재발행된다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
-        jobRepository.updateStatusIfAttemptMatches(job.getId(), JobStatus.FAILED, 0, Instant.now());
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
 
         retryService.retry(jobRepository.findById(job.getId()).orElseThrow());
 

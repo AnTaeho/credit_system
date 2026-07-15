@@ -29,6 +29,7 @@ class ConfirmServiceTest {
     @Test
     void attemptNo가_일치하면_완료_처리되고_ledger가_남는다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
 
         confirmService.confirm(job.getId(), 0, "https://stub/x.png");
 
@@ -41,11 +42,28 @@ class ConfirmServiceTest {
     @Test
     void attemptNo가_불일치하면_아무것도_하지_않는다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
 
         confirmService.confirm(job.getId(), 5, "https://stub/x.png");
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
-        assertThat(found.getStatus()).isEqualTo(JobStatus.HOLDING);
+        assertThat(found.getStatus()).isEqualTo(JobStatus.PROCESSING);
+        assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(1L)).isEmpty();
+    }
+
+    @Test
+    void 환불된_작업의_늦은_confirm은_무시한다() {
+        Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, java.time.Instant.now());
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.REFUNDED, JobStatus.FAILED, 0, java.time.Instant.now());
+
+        confirmService.confirm(job.getId(), 0, "https://stub/late.png");
+
+        Job found = jobRepository.findById(job.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(JobStatus.REFUNDED);
+        assertThat(found.getResultUrl()).isNull();
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(1L)).isEmpty();
     }
 }

@@ -1,7 +1,6 @@
 package com.example.credit_system.job.controller;
 
 import com.example.credit_system.global.auth.SessionConst;
-import com.example.credit_system.global.exception.ErrorResponse;
 import com.example.credit_system.job.dto.JobCreateRequest;
 import com.example.credit_system.job.dto.JobCreateResponse;
 import com.example.credit_system.job.dto.JobResponse;
@@ -9,7 +8,6 @@ import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.job.service.HoldResult;
 import com.example.credit_system.job.service.HoldService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -29,17 +27,10 @@ public class JobApiController {
 
     /** 생성 작업을 접수한다. */
     @PostMapping
-    public ResponseEntity<?> create(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId,
-                                     @RequestBody JobCreateRequest request) {
-        if (isBlank(request.idemKey())) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", "idemKey는 필수입니다."));
-        }
-        if (isBlank(request.prompt())) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", "prompt는 필수입니다."));
-        }
-
+    public JobCreateResponse create(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId,
+                                    @RequestBody JobCreateRequest request) {
         HoldResult result = holdService.requestGeneration(organizationId, request.idemKey(), request.prompt());
-        return ResponseEntity.ok(new JobCreateResponse(result.jobId(), result.duplicate()));
+        return new JobCreateResponse(result.jobId(), result.duplicate());
     }
 
     /** 로그인 조직의 작업 목록을 반환한다. */
@@ -48,10 +39,5 @@ public class JobApiController {
         return jobRepository.findByOrganizationIdOrderByIdDesc(organizationId).stream()
                 .map(JobResponse::from)
                 .toList();
-    }
-
-    /** 문자열이 없거나 공백인지 확인한다. */
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 }

@@ -1,5 +1,6 @@
 package com.example.credit_system.organization.service;
 
+import com.example.credit_system.global.exception.InvalidRequestException;
 import com.example.credit_system.ledger.domain.LedgerEntry;
 import com.example.credit_system.ledger.domain.LedgerType;
 import com.example.credit_system.ledger.repository.LedgerRepository;
@@ -22,15 +23,15 @@ public class ChargeService {
     /** 조직 잔액을 충전하고 원장에 기록한다. */
     @Transactional
     public void charge(Long organizationId, long amount) {
-        organizationRepository.findById(organizationId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));
-
+        if (amount <= 0) {
+            throw new InvalidRequestException("amount는 0보다 커야 합니다.");
+        }
         int updated = organizationRepository.addBalance(organizationId, amount, Instant.now());
         if (updated == 1) {
             ledgerRepository.save(LedgerEntry.of(organizationId, null, LedgerType.CHARGE, amount));
             log.info("충전 완료: organizationId={}, amount={}", organizationId, amount);
             return;
         }
-        throw new IllegalStateException("존재 확인 후 충전 업데이트가 실패했습니다: organizationId=" + organizationId);
+        throw new IllegalArgumentException("존재하지 않는 organization: " + organizationId);
     }
 }

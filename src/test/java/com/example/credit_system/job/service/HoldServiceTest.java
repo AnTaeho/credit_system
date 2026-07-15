@@ -2,6 +2,7 @@ package com.example.credit_system.job.service;
 
 import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.global.exception.InsufficientBalanceException;
+import com.example.credit_system.global.exception.InvalidRequestException;
 import com.example.credit_system.job.repository.IdempotencyKeyRepository;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.ledger.repository.LedgerRepository;
@@ -72,5 +73,19 @@ class HoldServiceTest {
                 .isInstanceOf(InsufficientBalanceException.class);
 
         assertThat(jobRepository.findByOrganizationIdOrderByIdDesc(poor.getId())).isEmpty();
+    }
+
+    @Test
+    void 필수값이_없거나_길이_제한을_넘으면_요청을_거부한다() {
+        assertThatThrownBy(() -> holdService.requestGeneration(organization.getId(), " ", "cat"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("idemKey는 필수입니다.");
+        assertThatThrownBy(() -> holdService.requestGeneration(
+                organization.getId(), "key", "a".repeat(1001)))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("prompt는 1000자를 초과할 수 없습니다.");
+
+        assertThat(jobRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
+        assertThat(outboxRepository.findBySentFalseOrderByIdAsc()).isEmpty();
     }
 }
