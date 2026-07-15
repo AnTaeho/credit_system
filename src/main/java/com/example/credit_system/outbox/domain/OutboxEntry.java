@@ -34,6 +34,7 @@ public class OutboxEntry {
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** 미발송 작업 메시지를 생성한다. */
     public OutboxEntry(Long jobId, String payload) {
         this.jobId = jobId;
         this.payload = payload;

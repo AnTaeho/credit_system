@@ -15,6 +15,7 @@ public class GenerationStubClient {
 
     private final AppProperties appProperties;
 
+    /** 설정된 지연과 실패율로 이미지 생성 결과를 모사한다. */
     public String generate(String prompt) {
         AppProperties.Stub stub = appProperties.stub();
         sleep(randomDelayMillis(stub));
@@ -29,6 +30,7 @@ public class GenerationStubClient {
         return resultUrl;
     }
 
+    /** 설정 범위에서 임의 지연 시간을 선택한다. */
     private long randomDelayMillis(AppProperties.Stub stub) {
         if (stub.maxDelayMillis() <= stub.minDelayMillis()) {
             return stub.minDelayMillis();
@@ -36,6 +38,7 @@ public class GenerationStubClient {
         return ThreadLocalRandom.current().nextLong(stub.minDelayMillis(), stub.maxDelayMillis() + 1);
     }
 
+    /** 지정 시간 동안 현재 스레드를 대기시킨다. */
     private void sleep(long millis) {
         if (millis <= 0) {
             return;

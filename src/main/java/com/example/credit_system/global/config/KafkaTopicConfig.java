@@ -14,6 +14,7 @@ public class KafkaTopicConfig {
 
     private final AppProperties appProperties;
 
+    /** 생성 작업용 Kafka 토픽을 구성한다. */
     @Bean
     public NewTopic generationJobsTopic() {
         return TopicBuilder.name(appProperties.kafka().topic())
@@ -22,8 +23,7 @@ public class KafkaTopicConfig {
                 .build();
     }
 
-    // DeadLetterPublishingRecoverer 기본 리졸버는 원본과 동일한 파티션 번호로 라우팅하므로
-    // 파티션 수를 원본 토픽과 동일하게 맞춰야 한다.
+    /** 원본과 같은 파티션 수의 DLT를 구성한다. */
     @Bean
     public NewTopic generationJobsDeadLetterTopic() {
         return TopicBuilder.name(appProperties.kafka().topic() + ".DLT")

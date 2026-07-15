@@ -56,7 +56,6 @@ class LoginControllerTest {
         ResponseEntity<Void> response = login("alice", "secret123");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
-        // 신규 세션 생성 시 서블릿 컨테이너가 쿠키 미지원 폴백으로 ";jsessionid=..."를 경로에 붙이므로 startsWith로 확인한다.
         assertThat(response.getHeaders().getLocation().getPath()).startsWith("/dashboard");
         assertThat(response.getHeaders().get(HttpHeaders.SET_COOKIE)).isNotNull();
     }

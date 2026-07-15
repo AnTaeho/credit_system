@@ -76,7 +76,7 @@ class GenerationPipelineEndToEndTest {
         });
 
         Organization found = organizationRepository.findById(organization.getId()).orElseThrow();
-        assertThat(found.getBalance()).isEqualTo(900L); // confirm은 잔액을 바꾸지 않음 — hold 시점 차감이 그대로 유지
+        assertThat(found.getBalance()).isEqualTo(900L);
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId()))
                 .extracting(entry -> entry.getType().name())
                 .contains("HOLD", "CONFIRM");

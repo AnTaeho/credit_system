@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 public class CreditSystemApplication {
 
+	/** 애플리케이션을 시작한다. */
 	public static void main(String[] args) {
 		SpringApplication.run(CreditSystemApplication.class, args);
 	}

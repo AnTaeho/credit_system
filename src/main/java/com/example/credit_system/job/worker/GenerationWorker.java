@@ -31,7 +31,7 @@ public class GenerationWorker {
     private final FailureService failureService;
     private final ObjectMapper objectMapper;
 
-    // 파티션 수만큼 컨슈머 스레드를 띄워 처리량을 파티션 수에 맞춘다.
+    /** 메시지를 선점해 생성 작업을 실행하고 결과 상태를 반영한다. */
     @KafkaListener(topics = "${app.kafka.topic}", concurrency = "${app.kafka.partitions}")
     public void consume(String payload) {
         GenerationJobMessage message = objectMapper.readValue(payload, GenerationJobMessage.class);

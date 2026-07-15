@@ -39,6 +39,7 @@ public class LedgerEntry {
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** 원장 항목을 생성한다. */
     private LedgerEntry(Long organizationId, Long jobId, LedgerType type, long amount) {
         this.organizationId = organizationId;
         this.jobId = jobId;
@@ -47,6 +48,7 @@ public class LedgerEntry {
         this.createdAt = Instant.now();
     }
 
+    /** 원장 항목을 생성한다. */
     public static LedgerEntry of(Long organizationId, Long jobId, LedgerType type, long amount) {
         return new LedgerEntry(organizationId, jobId, type, amount);
     }

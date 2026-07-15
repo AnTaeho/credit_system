@@ -77,7 +77,7 @@ class JobRepositoryTest {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
 
         int beforeFail = jobRepository.incrementAttemptForRetry(job.getId(), 0, Instant.now());
-        assertThat(beforeFail).isZero(); // 아직 HOLDING이므로 실패
+        assertThat(beforeFail).isZero();
 
         jobRepository.updateStatusIfAttemptMatches(job.getId(), JobStatus.FAILED, 0, Instant.now());
         int afterFail = jobRepository.incrementAttemptForRetry(job.getId(), 0, Instant.now());

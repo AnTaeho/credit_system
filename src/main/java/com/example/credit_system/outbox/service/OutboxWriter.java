@@ -14,6 +14,7 @@ public class OutboxWriter {
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
 
+    /** 생성 작업 메시지를 outbox에 저장한다. */
     public void write(Long jobId, Long organizationId, int attemptNo, String prompt) {
         GenerationJobMessage message = new GenerationJobMessage(jobId, organizationId, attemptNo, prompt);
         String payload = objectMapper.writeValueAsString(message);

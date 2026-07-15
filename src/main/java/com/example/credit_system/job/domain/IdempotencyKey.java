@@ -32,6 +32,7 @@ public class IdempotencyKey {
 
     private Long jobId;
 
+    /** 조직별 멱등 키를 생성한다. */
     public IdempotencyKey(Long organizationId, String idemKey) {
         this.organizationId = organizationId;
         this.idemKey = idemKey;

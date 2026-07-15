@@ -69,8 +69,6 @@ class RetryRefundTest {
 
         HoldResult result = holdService.requestGeneration(organization.getId(), "retry-key", "cat");
 
-        // app.generation.max-attempts=3, 조건이 "attemptNo < 3"이므로 attemptNo 0,1,2인 시점에 각각 재시도가 한 번씩 더 일어나
-        // 실제로는 초기 시도 포함 총 4번(attemptNo 0→1→2→3) 시도된 뒤 attemptNo=3에서 최종 환불된다.
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             var job = jobRepository.findById(result.jobId()).orElseThrow();
             assertThat(job.getStatus()).isEqualTo(JobStatus.REFUNDED);

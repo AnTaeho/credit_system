@@ -46,8 +46,6 @@ class ConcurrentHoldTest {
 
     @Test
     void 동시에_여러_요청이_들어와도_잔액이_음수가_되지_않는다() throws InterruptedException {
-        // app.generation.cost=100(테스트 프로파일 기본값), 잔액 500 → 조건부 UPDATE가 경합을 직렬화하므로
-        // 정확히 5건만 성공하고 나머지 5건은 잔액 부족으로 거절된다
         Organization organization = organizationRepository.save(new Organization("acme", 500L));
 
         int threadCount = 10;

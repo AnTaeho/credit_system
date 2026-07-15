@@ -10,6 +10,7 @@ import java.time.Instant;
 
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
 
+    /** 잔액이 충분한 조직에서 금액을 원자적으로 차감한다. */
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Organization o
@@ -20,6 +21,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
                       @Param("amount") long amount,
                       @Param("now") Instant now);
 
+    /** 조직 잔액에 금액을 원자적으로 더한다. */
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE Organization o

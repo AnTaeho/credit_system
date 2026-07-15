@@ -65,8 +65,6 @@ class DuplicateIdemKeyTest {
                     start.await();
                     holdService.requestGeneration(organization.getId(), idemKey, "cat");
                 } catch (DuplicateRequestInProgressException e) {
-                    // 다른 스레드가 idempotency key를 선점한 직후, job 연결 전의 극히 짧은 race window에 걸린 경우.
-                    // 클라이언트가 같은 idemKey로 재시도하면 결국 성공 응답을 받게 되므로 이 테스트에선 무시한다.
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 } finally {

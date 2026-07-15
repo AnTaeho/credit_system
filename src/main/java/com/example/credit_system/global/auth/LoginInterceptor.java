@@ -11,6 +11,7 @@ import java.io.IOException;
 @Component
 public class LoginInterceptor implements HandlerInterceptor {
 
+    /** 인증 세션을 확인하고 요청 속성에 사용자 정보를 전달한다. */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws IOException {

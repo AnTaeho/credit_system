@@ -23,6 +23,7 @@ public class RefundService {
     private final OrganizationRepository organizationRepository;
     private final LedgerRepository ledgerRepository;
 
+    /** 최종 실패 작업을 환불하고 원장에 기록한다. */
     @Transactional
     public void finalRefund(Job job) {
         int updated = jobRepository.transitionIfStatusAndAttemptMatch(

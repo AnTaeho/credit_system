@@ -20,6 +20,7 @@ public class ConfirmService {
     private final JobRepository jobRepository;
     private final LedgerRepository ledgerRepository;
 
+    /** 유효한 작업 시도를 완료 처리하고 원장에 기록한다. */
     @Transactional
     public void confirm(Long jobId, int attemptNo, String resultUrl) {
         int updated = jobRepository.completeIfAttemptMatches(jobId, resultUrl, attemptNo, Instant.now());

@@ -12,9 +12,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 @SpringBootTest(properties = {
         "app.seed.enabled=true",
-        // 다른 테스트 클래스들과 같은 이름의 H2 인메모리 DB(credit_test)를 공유하면 DB_CLOSE_DELAY=-1
-        // 때문에 시드 데이터가 JVM 전체에 걸쳐 살아남아 다른 테스트의 "alice" 삽입과 충돌한다.
-        // 이 테스트만 별도 이름의 DB를 써서 격리한다.
         "spring.datasource.url=jdbc:h2:mem:seed_test;MODE=MySQL;DB_CLOSE_DELAY=-1"
 })
 class DataSeederTest {

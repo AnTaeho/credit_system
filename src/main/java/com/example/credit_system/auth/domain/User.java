@@ -34,6 +34,7 @@ public class User {
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** 조직에 속한 사용자를 생성한다. */
     public User(Long organizationId, String username, String encodedPassword) {
         this.organizationId = organizationId;
         this.username = username;

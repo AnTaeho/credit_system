@@ -12,6 +12,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final LoginInterceptor loginInterceptor;
 
+    /** 보호 대상 경로에 로그인 인터셉터를 등록한다. */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(loginInterceptor)

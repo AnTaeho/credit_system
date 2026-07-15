@@ -33,6 +33,7 @@ public class HoldService {
     private final OutboxWriter outboxWriter;
     private final AppProperties appProperties;
 
+    /** 멱등성을 보장하며 비용을 차감하고 생성 작업을 등록한다. */
     @Transactional
     public HoldResult requestGeneration(Long organizationId, String idemKey, String prompt) {
         Optional<IdempotencyKey> existing = idempotencyKeyRepository
@@ -41,10 +42,6 @@ public class HoldService {
             return toDuplicateResult(existing.get());
         }
 
-        // 여기서 saveAndFlush로 예외를 캐치해 처리하지 않는다: Hibernate는 flush 중 예외가 발생한 세션을
-        // 계속 사용하면(같은 트랜잭션에서 추가 쿼리를 날리면) AssertionFailure로 죽어버린다. 위에서 먼저
-        // SELECT로 대부분의 중복 요청을 걸러내고, 극히 드문 동시 경합(두 요청이 동시에 SELECT를 통과)만
-        // unique 제약 위반으로 트랜잭션 전체가 롤백되게 두고, GlobalExceptionHandler가 이를 번역한다.
         idempotencyKeyRepository.save(new IdempotencyKey(organizationId, idemKey));
 
         long cost = appProperties.generation().cost();
@@ -64,6 +61,7 @@ public class HoldService {
         return new HoldResult(job.getId(), false);
     }
 
+    /** 기존 멱등 키를 중복 요청 결과로 변환한다. */
     private HoldResult toDuplicateResult(IdempotencyKey existing) {
         if (existing.getJobId() == null) {
             throw new DuplicateRequestInProgressException();
@@ -72,6 +70,7 @@ public class HoldService {
         return new HoldResult(existing.getJobId(), true);
     }
 
+    /** 잔액이 충분하면 비용을 원자적으로 차감한다. */
     private void deductBalance(Long organizationId, long cost) {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));

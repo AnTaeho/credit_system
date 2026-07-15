@@ -18,6 +18,7 @@ public class LedgerApiController {
 
     private final LedgerRepository ledgerRepository;
 
+    /** 로그인 조직의 원장 내역을 최신순으로 반환한다. */
     @GetMapping
     public List<LedgerResponse> list(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId) {
         return ledgerRepository.findByOrganizationIdOrderByIdDesc(organizationId).stream()

@@ -19,6 +19,7 @@ public class ChargeService {
     private final OrganizationRepository organizationRepository;
     private final LedgerRepository ledgerRepository;
 
+    /** 조직 잔액을 충전하고 원장에 기록한다. */
     @Transactional
     public void charge(Long organizationId, long amount) {
         organizationRepository.findById(organizationId)

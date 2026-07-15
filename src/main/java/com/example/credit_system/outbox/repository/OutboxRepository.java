@@ -11,8 +11,10 @@ import java.util.List;
 
 public interface OutboxRepository extends JpaRepository<OutboxEntry, Long> {
 
+    /** 미발송 항목을 오래된 순으로 조회한다. */
     List<OutboxEntry> findBySentFalseOrderByIdAsc();
 
+    /** outbox 항목을 발송 완료로 변경한다. */
     @Transactional
     @Modifying(clearAutomatically = true)
     @Query("UPDATE OutboxEntry o SET o.sent = true WHERE o.id = :id")

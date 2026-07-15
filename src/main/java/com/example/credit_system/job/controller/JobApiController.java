@@ -27,6 +27,7 @@ public class JobApiController {
     private final HoldService holdService;
     private final JobRepository jobRepository;
 
+    /** 생성 작업을 접수한다. */
     @PostMapping
     public ResponseEntity<?> create(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId,
                                      @RequestBody JobCreateRequest request) {
@@ -41,6 +42,7 @@ public class JobApiController {
         return ResponseEntity.ok(new JobCreateResponse(result.jobId(), result.duplicate()));
     }
 
+    /** 로그인 조직의 작업 목록을 반환한다. */
     @GetMapping
     public List<JobResponse> list(@RequestAttribute(SessionConst.ORGANIZATION_ID) Long organizationId) {
         return jobRepository.findByOrganizationIdOrderByIdDesc(organizationId).stream()
@@ -48,6 +50,7 @@ public class JobApiController {
                 .toList();
     }
 
+    /** 문자열이 없거나 공백인지 확인한다. */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

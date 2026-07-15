@@ -18,11 +18,13 @@ public class LoginController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    /** 로그인 화면을 반환한다. */
     @GetMapping("/login")
     public String loginForm() {
         return "login";
     }
 
+    /** 사용자 인증 후 세션을 생성한다. */
     @PostMapping("/login")
     public String login(@RequestParam String username,
                          @RequestParam String password,

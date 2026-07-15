@@ -21,6 +21,7 @@ public class DataSeeder implements CommandLineRunner {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    /** 저장소가 비어 있으면 샘플 조직과 사용자를 생성한다. */
     @Override
     public void run(String... args) {
         if (organizationRepository.count() > 0) {

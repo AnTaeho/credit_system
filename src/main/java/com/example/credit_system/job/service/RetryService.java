@@ -18,6 +18,7 @@ public class RetryService {
     private final JobRepository jobRepository;
     private final OutboxWriter outboxWriter;
 
+    /** 실패한 작업의 시도 번호를 높여 재처리 메시지를 등록한다. */
     @Transactional
     public void retry(Job job) {
         int updated = jobRepository.incrementAttemptForRetry(job.getId(), job.getAttemptNo(), Instant.now());

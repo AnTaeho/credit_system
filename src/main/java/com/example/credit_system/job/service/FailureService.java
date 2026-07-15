@@ -16,6 +16,7 @@ public class FailureService {
 
     private final JobRepository jobRepository;
 
+    /** 유효한 작업 시도를 실패 상태로 변경한다. */
     @Transactional
     public void markFailed(Long jobId, int attemptNo) {
         int updated = jobRepository.updateStatusIfAttemptMatches(jobId, JobStatus.FAILED, attemptNo, Instant.now());

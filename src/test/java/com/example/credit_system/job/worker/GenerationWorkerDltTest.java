@@ -61,8 +61,6 @@ class GenerationWorkerDltTest {
 
     @Test
     void poison_메시지가_DLT로_격리되어_이후_정상_메시지_처리를_막지_않는다() {
-        // partitions=1인 토픽에 poison message를 먼저 보내 파티션을 점유시킨 뒤,
-        // 정상 메시지가 뒤이어 처리되는지로 파티션 블로킹 여부를 검증한다.
         String poisonPayload = "이것은 JSON이 아닌 poison 메시지입니다";
         kafkaTemplate.send("generation-jobs", "poison-key", poisonPayload);
 
@@ -81,8 +79,6 @@ class GenerationWorkerDltTest {
         Map<String, Object> consumerProps = KafkaTestUtils.consumerProps(
                 embeddedKafkaBroker, "dlt-verification-group", true);
         consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        // KafkaTestUtils.consumerProps 기본값은 key.deserializer가 IntegerDeserializer이므로
-        // String 키를 사용하는 이 토픽에 맞게 재정의해야 한다.
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         Consumer<String, String> consumer = new DefaultKafkaConsumerFactory<String, String>(consumerProps)
                 .createConsumer();

@@ -26,6 +26,7 @@ public class DeadJobSchedulerTask {
     private final RefundService refundService;
     private final AppProperties appProperties;
 
+    /** 만료되거나 실패한 작업을 찾아 재시도 또는 환불한다. */
     @Scheduled(fixedDelayString = "${app.scheduling.dead-job-scan-interval-millis:5000}")
     public void scan() {
         for (Long jobId : heartbeatRegistry.findExpiredJobIds()) {
@@ -38,10 +39,7 @@ public class DeadJobSchedulerTask {
         }
     }
 
-    // outbox 발행 실패(브로커 장애 등)로 메시지가 유실되면 HOLDING에서 영구 정체될 수 있다.
-    // 일정 시간 이상 갱신되지 않은 HOLDING job을 FAILED로 되돌려 기존 FAILED 처리 루프가
-    // 재시도/환불을 이어받게 한다. status+attemptNo 이중 fencing으로, 그 사이 outbox가
-    // 뒤늦게 발행되어 컨슈머가 PROCESSING으로 이미 가져갔다면 이 전이는 무효(0행)가 된다.
+    /** 오래 정체된 HOLDING 작업을 실패 상태로 회수한다. */
     private void reapStaleHolding() {
         Instant cutoff = Instant.now().minusSeconds(appProperties.holding().timeoutSeconds());
         for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.HOLDING, cutoff)) {
@@ -53,14 +51,7 @@ public class DeadJobSchedulerTask {
         }
     }
 
-    // PROCESSING 진입 직후 heartbeat 등록 전에 워커가 크래시하거나, 등록 후 Redis 데이터가
-    // 유실되거나, DLT(Dead Letter Topic)로 격리된 메시지의 job이 PROCESSING에 남는 경우
-    // 스케줄러의 heartbeat 만료 감지(findExpiredJobIds)로는 회수할 수 없다. 이를 보완해
-    // 일정 시간 이상 갱신되지 않은 PROCESSING job 중 Redis에 살아있는 heartbeat가 없는
-    // 것만 FAILED로 되돌린다. status+attemptNo 이중 fencing 덕에, 실제로는 워커가 정상
-    // 동작 중인데 오탐(hasLiveHeartbeat 조회 시점의 간극 등)이 나더라도 이후 retry가
-    // attemptNo를 증가시키므로 옛 워커의 최종 confirm(complete/updateStatusIfAttemptMatches)은
-    // attemptNo 불일치로 0행이 되어 무효화되어 안전하다.
+    /** heartbeat가 없는 오래된 PROCESSING 작업을 실패 상태로 회수한다. */
     private void reapStaleProcessing() {
         Instant cutoff = Instant.now().minusSeconds(appProperties.processing().timeoutSeconds());
         for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.PROCESSING, cutoff)) {
@@ -76,6 +67,7 @@ public class DeadJobSchedulerTask {
         }
     }
 
+    /** heartbeat가 만료된 작업을 실패 상태로 변경한다. */
     private void markExpiredAsFailed(Long jobId) {
         jobRepository.findById(jobId).ifPresent(job -> {
             int updated = jobRepository.updateStatusIfAttemptMatches(
@@ -87,8 +79,8 @@ public class DeadJobSchedulerTask {
         });
     }
 
+    /** 최신 실패 상태를 확인해 재시도 또는 환불을 수행한다. */
     private void process(Job job) {
-        // scan() 시작 시점의 스냅샷일 수 있으므로 재조회해 최신 상태로 분기한다.
         Job current = jobRepository.findById(job.getId()).orElse(null);
         if (current == null || current.getStatus() != JobStatus.FAILED) {
             return;
