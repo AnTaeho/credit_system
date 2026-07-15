@@ -81,4 +81,23 @@ class OutboxRelayUnitTest {
 
         verify(outboxRepository).markSent(1L);
     }
+
+    @Test
+    void 발행_대기_중_인터럽트되면_상태를_보존하고_다음_항목을_처리하지_않는다() {
+        OutboxEntry first = entry(1L, 10L);
+        OutboxEntry second = entry(2L, 20L);
+        when(outboxRepository.findBySentFalseOrderByIdAsc()).thenReturn(List.of(first, second));
+        when(kafkaTemplate.send(any(), any(), any())).thenReturn(new CompletableFuture<>());
+
+        Thread.currentThread().interrupt();
+        try {
+            outboxRelay.relay();
+
+            verify(kafkaTemplate, org.mockito.Mockito.times(1)).send(any(), any(), any());
+            verify(outboxRepository, never()).markSent(anyLong());
+            org.assertj.core.api.Assertions.assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+        }
+    }
 }

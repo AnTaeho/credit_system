@@ -73,6 +73,8 @@ class HoldServiceTest {
                 .isInstanceOf(InsufficientBalanceException.class);
 
         assertThat(jobRepository.findByOrganizationIdOrderByIdDesc(poor.getId())).isEmpty();
+        assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(poor.getId())).isEmpty();
+        assertThat(outboxRepository.findBySentFalseOrderByIdAsc()).isEmpty();
     }
 
     @Test
@@ -87,5 +89,29 @@ class HoldServiceTest {
 
         assertThat(jobRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
         assertThat(outboxRepository.findBySentFalseOrderByIdAsc()).isEmpty();
+    }
+
+    @Test
+    void idemKey와_prompt의_최대_길이는_허용한다() {
+        HoldResult result = holdService.requestGeneration(
+                organization.getId(), "k".repeat(100), "p".repeat(1000));
+
+        assertThat(result.duplicate()).isFalse();
+        assertThat(jobRepository.findById(result.jobId()).orElseThrow().getPrompt()).hasSize(1000);
+    }
+
+    @Test
+    void idemKey가_최대_길이를_넘으면_어떤_데이터도_변경하지_않는다() {
+        assertThatThrownBy(() -> holdService.requestGeneration(
+                organization.getId(), "k".repeat(101), "cat"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("idemKey는 100자를 초과할 수 없습니다.");
+
+        assertThat(organizationRepository.findById(organization.getId()).orElseThrow().getBalance())
+                .isEqualTo(1000L);
+        assertThat(idempotencyKeyRepository.count()).isZero();
+        assertThat(jobRepository.count()).isZero();
+        assertThat(ledgerRepository.count()).isZero();
+        assertThat(outboxRepository.count()).isZero();
     }
 }

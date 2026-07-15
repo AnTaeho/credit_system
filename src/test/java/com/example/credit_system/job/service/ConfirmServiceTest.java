@@ -66,4 +66,18 @@ class ConfirmServiceTest {
         assertThat(found.getResultUrl()).isNull();
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(1L)).isEmpty();
     }
+
+    @Test
+    void 같은_attempt의_confirm을_두_번_호출해도_원장은_한_번만_기록된다() {
+        Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
+        jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
+
+        confirmService.confirm(job.getId(), 0, "https://stub/first.png");
+        confirmService.confirm(job.getId(), 0, "https://stub/second.png");
+
+        Job found = jobRepository.findById(job.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(JobStatus.COMPLETED);
+        assertThat(found.getResultUrl()).isEqualTo("https://stub/first.png");
+        assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(1L)).hasSize(1);
+    }
 }

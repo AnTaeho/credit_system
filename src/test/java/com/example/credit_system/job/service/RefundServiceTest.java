@@ -58,4 +58,21 @@ class RefundServiceTest {
         Organization foundOrg = organizationRepository.findById(organization.getId()).orElseThrow();
         assertThat(foundOrg.getBalance()).isEqualTo(700L);
     }
+
+    @Test
+    void 같은_작업을_두_번_환불해도_잔액과_원장은_한_번만_반영된다() {
+        Organization organization = organizationRepository.save(new Organization("acme", 700L));
+        Job job = jobRepository.save(Job.hold(organization.getId(), 300L, "cat"));
+        jobRepository.transitionIfStatusAndAttemptMatch(
+                job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
+        Job failed = jobRepository.findById(job.getId()).orElseThrow();
+
+        refundService.finalRefund(failed);
+        refundService.finalRefund(failed);
+
+        assertThat(organizationRepository.findById(organization.getId()).orElseThrow().getBalance())
+                .isEqualTo(1000L);
+        assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId()))
+                .hasSize(1);
+    }
 }

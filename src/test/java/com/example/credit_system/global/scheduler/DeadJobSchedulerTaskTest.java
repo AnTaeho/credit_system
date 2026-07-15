@@ -65,6 +65,14 @@ class DeadJobSchedulerTaskTest {
         return job;
     }
 
+    private static Job failedJob(long id, int attemptNo) {
+        Job job = Job.hold(1L, 100L, "cat");
+        ReflectionTestUtils.setField(job, "id", id);
+        ReflectionTestUtils.setField(job, "status", JobStatus.FAILED);
+        ReflectionTestUtils.setField(job, "attemptNo", attemptNo);
+        return job;
+    }
+
     @Test
     void 정체된_HOLDING_job은_FAILED로_전이를_시도한다() {
         Job job = staleHoldingJob(10L);
@@ -143,5 +151,45 @@ class DeadJobSchedulerTaskTest {
         verify(jobRepository).transitionIfStatusAndAttemptMatch(
                 eq(30L), eq(JobStatus.FAILED), eq(JobStatus.PROCESSING), eq(0), any(Instant.class));
         verify(heartbeatRegistry).remove(30L);
+    }
+
+    @Test
+    void 실패한_작업이_최대_attempt_미만이면_재시도한다() {
+        Job snapshot = failedJob(40L, 2);
+        Job current = failedJob(40L, 2);
+        when(jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)).thenReturn(List.of(snapshot));
+        when(jobRepository.findById(40L)).thenReturn(Optional.of(current));
+
+        task.scan();
+
+        verify(retryService).retry(current);
+        verify(refundService, never()).finalRefund(any(Job.class));
+    }
+
+    @Test
+    void 실패한_작업이_최대_attempt에_도달하면_환불한다() {
+        Job snapshot = failedJob(41L, 3);
+        Job current = failedJob(41L, 3);
+        when(jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)).thenReturn(List.of(snapshot));
+        when(jobRepository.findById(41L)).thenReturn(Optional.of(current));
+
+        task.scan();
+
+        verify(refundService).finalRefund(current);
+        verify(retryService, never()).retry(any(Job.class));
+    }
+
+    @Test
+    void FAILED_스냅샷이더라도_재조회한_상태가_종결이면_처리하지_않는다() {
+        Job snapshot = failedJob(42L, 2);
+        Job completed = failedJob(42L, 2);
+        ReflectionTestUtils.setField(completed, "status", JobStatus.COMPLETED);
+        when(jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)).thenReturn(List.of(snapshot));
+        when(jobRepository.findById(42L)).thenReturn(Optional.of(completed));
+
+        task.scan();
+
+        verify(retryService, never()).retry(any(Job.class));
+        verify(refundService, never()).finalRefund(any(Job.class));
     }
 }
