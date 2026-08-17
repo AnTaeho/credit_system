@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credit System — 요청 하나가 지나가는 전 과정</title>
+<style>
+  :root{
+    --bg: #0d1117;
+    --bg-panel: #131a24;
+    --bg-panel2: #161d29;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --text-dim: #9aa7b5;
+    --text-faint: #6b7787;
+    --mono: "SF Mono", "Menlo", monospace;
+
+    --c-sync: #4da3ff;      /* 동기 요청 진입 경로 */
+    --c-sync-bg: rgba(77,163,255,0.10);
+    --c-success: #3fb950;   /* 성공 경로 */
+    --c-success-bg: rgba(63,185,80,0.10);
+    --c-fail: #f0883e;      /* 실패/재시도 경로 */
+    --c-fail-bg: rgba(240,136,62,0.10);
+    --c-refund: #f85149;    /* 환불/종료 */
+    --c-refund-bg: rgba(248,81,73,0.10);
+    --c-infra: #bc8cff;     /* 인프라: db 작업 큐/redis/scheduler */
+    --c-infra-bg: rgba(188,140,255,0.10);
+  }
+  :root[data-theme="light"]{
+    --bg: #f4f6f8;
+    --bg-panel: #ffffff;
+    --bg-panel2: #f0f2f5;
+    --border: #d5dbe2;
+    --text: #1b2430;
+    --text-dim: #4b5563;
+    --text-faint: #7c8794;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg: #f4f6f8;
+      --bg-panel: #ffffff;
+      --bg-panel2: #f0f2f5;
+      --border: #d5dbe2;
+      --text: #1b2430;
+      --text-dim: #4b5563;
+      --text-faint: #7c8794;
+    }
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    line-height: 1.55;
+    padding: 24px 16px 80px;
+  }
+  .wrap{ max-width: 1100px; margin: 0 auto; }
+
+  header.page{
+    text-align:center;
+    padding: 28px 16px 34px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 34px;
+  }
+  header.page h1{
+    font-size: 1.7rem;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  header.page p.subtitle{
+    color: var(--text-dim);
+    font-size: 0.98rem;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  header.page p.subtitle strong{ color: var(--text); }
+
+  section{ margin-bottom: 56px; }
+  h2.section-title{
+    font-size: 1.15rem;
+    margin: 0 0 6px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  h2.section-title .num{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    background: var(--bg-panel2);
+    border: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+  p.section-desc{ color: var(--text-dim); font-size: 0.9rem; margin: 8px 0 20px; }
+
+  code, .mono{ font-family: var(--mono); }
+
+  /* ---------- Legend ---------- */
+  .legend{
+    display:flex; flex-wrap:wrap; gap: 10px 18px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 28px;
+    font-size: 0.85rem;
+  }
+  .legend .item{ display:flex; align-items:center; gap: 8px; }
+  .legend .swatch{
+    width: 14px; height: 14px; border-radius: 4px; flex: none;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .legend button.filter-btn{
+    font-family: inherit;
+    font-size: 0.8rem;
+    cursor:pointer;
+    background: var(--bg-panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 4px 12px;
+  }
+  .legend .filters{ margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
+  .legend button.filter-btn.active{
+    background: var(--c-sync);
+    border-color: var(--c-sync);
+    color: #06121f;
+    font-weight:600;
+  }
+
+  /* ---------- Flow boxes ---------- */
+  .flow{
+    display:flex; flex-direction:column; align-items:stretch; gap: 0;
+  }
+  .step{
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    border-radius: 10px;
+    padding: 16px 18px;
+    position: relative;
+  }
+  .step[data-path="sync"]{ border-left: 4px solid var(--c-sync); }
+  .step[data-path="success"]{ border-left: 4px solid var(--c-success); }
+  .step[data-path="fail"]{ border-left: 4px solid var(--c-fail); }
+  .step[data-path="refund"]{ border-left: 4px solid var(--c-refund); }
+  .step[data-path="infra"]{ border-left: 4px solid var(--c-infra); }
+
+  body.filter-success .step:not([data-path="success"]):not([data-path="sync"]):not([data-path="infra"]){ opacity: 0.25; }
+  body.filter-fail .step:not([data-path="fail"]):not([data-path="refund"]):not([data-path="sync"]):not([data-path="infra"]){ opacity: 0.25; }
+
+  .step-head{
+    display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    margin-bottom: 6px;
+  }
+  .step-title{ font-weight:600; font-size: 0.98rem; }
+  .step-badge{
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight:600;
+    flex:none;
+  }
+  .step[data-path="sync"] .step-badge{ background: var(--c-sync-bg); color: var(--c-sync); }
+  .step[data-path="success"] .step-badge{ background: var(--c-success-bg); color: var(--c-success); }
+  .step[data-path="fail"] .step-badge{ background: var(--c-fail-bg); color: var(--c-fail); }
+  .step[data-path="refund"] .step-badge{ background: var(--c-refund-bg); color: var(--c-refund); }
+  .step[data-path="infra"] .step-badge{ background: var(--c-infra-bg); color: var(--c-infra); }
+
+  .classname{
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--bg-panel2);
+    padding: 1px 7px;
+    border-radius: 5px;
+    display:inline-block;
+    margin-bottom: 4px;
+  }
+  .filepath{
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+  .step-desc{ font-size: 0.87rem; color: var(--text-dim); }
+  .step-desc ul{ margin: 6px 0 0; padding-left: 18px; }
+  .step-desc li{ margin-bottom: 4px; }
+  .step-desc code{
+    background: var(--bg-panel2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.82em;
+    color: var(--text);
+  }
+
+  /* arrow connector */
+  .arrow-down{
+    display:flex; justify-content:center; align-items:center;
+    height: 34px;
+    position: relative;
+  }
+  .arrow-down svg{ display:block; }
+  .arrow-down.loop-back{ height: 44px; }
+
+  .arrow-label{
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    text-align:center;
+    margin-top: -6px;
+    margin-bottom: 2px;
+  }
+
+  /* transactional dashed group */
+  .txn-group{
+    border: 2px dashed var(--text-faint);
+    border-radius: 14px;
+    padding: 18px 18px 6px;
+    position: relative;
+    margin: 4px 0;
+  }
+  .txn-label{
+    position: absolute;
+    top: -12px; left: 16px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    color: var(--text-faint);
+    letter-spacing: 0.03em;
+  }
+  .substep-list{
+    display:flex; flex-direction:column; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .substep{
+    display:flex; gap: 10px;
+    background: var(--bg-panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+  }
+  .substep .idx{
+    flex:none;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+  .substep .body{ flex:1; color: var(--text-dim); }
+  .substep .body strong{ color: var(--text); font-family: var(--mono); font-weight:600; font-size: 0.88em; }
+  .substep code{
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.82em;
+    color: var(--text);
+  }
+  .substep .err{ color: var(--c-refund); font-family: var(--mono); font-size: 0.82em; }
+
+  /* branch layout for success/fail split */
+  .branch-row{
+    display:grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  @media (max-width: 720px){
+    .branch-row{ grid-template-columns: 1fr; }
+  }
+  .branch-col{ display:flex; flex-direction:column; }
+  .branch-connector{
+    display:flex; justify-content:center; gap: 0; position: relative; height: 40px;
+  }
+
+  /* ---------- state diagram ---------- */
+  .state-diagram{
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 20px;
+    overflow-x: auto;
+  }
+  .state-row{
+    display:flex; align-items:center; justify-content:center; gap: 10px;
+    min-width: 620px;
+    flex-wrap: nowrap;
+  }
+  .state-node{
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    font-weight:600;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    white-space: nowrap;
+    text-align:center;
+  }
+  .state-node.holding{ border-color: var(--c-sync); color: var(--c-sync); }
+  .state-node.processing{ border-color: var(--c-infra); color: var(--c-infra); }
+  .state-node.completed{ border-color: var(--c-success); color: var(--c-success); }
+  .state-node.failed{ border-color: var(--c-fail); color: var(--c-fail); }
+  .state-node.refunded{ border-color: var(--c-refund); color: var(--c-refund); }
+  .state-arrow-h{ color: var(--text-faint); font-size: 1.1rem; flex:none; }
+  .state-diagram .retry-loop{
+    display:flex; justify-content:center; margin-top: 10px;
+    font-family: var(--mono); font-size: 0.75rem; color: var(--c-fail);
+    min-width: 620px;
+  }
+  .state-diagram .branch-note{
+    text-align:center; font-size: 0.75rem; color: var(--text-faint); margin-top: 14px; min-width:620px;
+  }
+
+  /* ---------- tables ---------- */
+  .table-scroll{ overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table{
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 560px;
+    font-size: 0.86rem;
+    background: var(--bg-panel);
+  }
+  th, td{
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  th{
+    background: var(--bg-panel2);
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  tr:last-child td{ border-bottom: none; }
+  td code, td.mono{ font-family: var(--mono); font-size: 0.82em; }
+  .badge-status{
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight:600;
+    white-space:nowrap;
+    display:inline-block;
+  }
+  .badge-409{ background: var(--c-refund-bg); color: var(--c-refund); }
+  .badge-400{ background: var(--c-fail-bg); color: var(--c-fail); }
+
+  pre.sql{
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    background: var(--bg-panel2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+  }
+
+  /* ---------- timeline ---------- */
+  .timeline{
+    display:flex; flex-direction:column; gap: 0;
+  }
+  .tl-row{
+    display:grid;
+    grid-template-columns: 160px 1fr;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tl-row:last-child{ border-bottom:none; }
+  .tl-step-label{
+    font-size: 0.85rem;
+    font-weight:600;
+    color: var(--text-dim);
+    padding-top: 2px;
+  }
+  .tl-tables{ display:flex; flex-wrap:wrap; gap: 8px; }
+  .tl-chip{
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--bg-panel2);
+    border: 1px solid var(--border);
+    display:flex; align-items:center; gap:6px;
+  }
+  .tl-chip .op{
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight:700;
+  }
+  .op-update{ background: rgba(77,163,255,0.18); color: var(--c-sync); }
+  .op-insert{ background: rgba(63,185,80,0.18); color: var(--c-success); }
+  .op-read{ background: rgba(255,255,255,0.08); color: var(--text-dim); }
+
+  footer{
+    text-align:center;
+    color: var(--text-faint);
+    font-size: 0.78rem;
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 600px){
+    header.page h1{ font-size: 1.3rem; }
+    .step{ padding: 12px 14px; }
+    .legend{ font-size: 0.78rem; }
+    .legend .filters{ margin-left: 0; width:100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Credit System — 요청 하나가 지나가는 전 과정</h1>
+  <p class="subtitle"><strong>핵심 불변식:</strong> 크레딧은 항상 정확하게 차감·환불된다. 이중 차감도, 환불 유실도 허용하지 않는다.</p>
+</header>
+
+<div class="legend">
+  <div class="item"><span class="swatch" style="background:var(--c-sync)"></span>동기 요청 진입</div>
+  <div class="item"><span class="swatch" style="background:var(--c-success)"></span>성공 경로</div>
+  <div class="item"><span class="swatch" style="background:var(--c-fail)"></span>실패·재시도 경로</div>
+  <div class="item"><span class="swatch" style="background:var(--c-refund)"></span>환불·종료</div>
+  <div class="item"><span class="swatch" style="background:var(--c-infra)"></span>인프라 (DB 작업 큐·Redis·스케줄러)</div>
+  <div class="filters">
+    <button class="filter-btn" id="btn-success" onclick="toggleFilter('success')">성공 경로만 보기</button>
+    <button class="filter-btn" id="btn-fail" onclick="toggleFilter('fail')">실패 경로만 보기</button>
+    <button class="filter-btn" id="btn-reset" onclick="resetFilter()">전체 보기</button>
+  </div>
+</div>
+
+<!-- ================= MAIN FLOW ================= -->
+<section id="main-flow">
+  <h2 class="section-title"><span class="num">1</span>메인 플로우</h2>
+  <p class="section-desc">요청 진입부터 최종 상태(COMPLETED / REFUNDED) 확정까지, 위에서 아래로 이어지는 전체 흐름.</p>
+
+  <div class="flow">
+
+    <!-- STEP 1 -->
+    <div class="step" data-path="sync">
+      <div class="step-head">
+        <span class="step-title">① 요청 진입</span>
+        <span class="step-badge">SYNC</span>
+      </div>
+      <div class="classname">LoginInterceptor.preHandle → JobApiController.create</div>
+      <div class="filepath">global/auth/LoginInterceptor.java · job/controller/JobApiController.java</div>
+      <div class="step-desc">
+        <ul>
+          <li>브라우저 대시보드(<code>templates/dashboard.html</code>)에서 <code>POST /api/jobs</code> 호출, body = <code>{idemKey, prompt}</code></li>
+          <li><code>LoginInterceptor</code>: HttpSession에서 ORGANIZATION_ID 확인. 없으면 <code>/api/**</code>는 401, 그 외는 <code>/login</code> 리다이렉트. 있으면 organizationId/userId/username을 request attribute로 전달</li>
+          <li><code>JobApiController.create</code>: <code>@RequestAttribute(ORGANIZATION_ID)</code> 로 조직 식별 → <code>HoldService.requestGeneration(organizationId, idemKey, prompt)</code> 호출</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <svg width="20" height="34" viewBox="0 0 20 34"><line x1="10" y1="0" x2="10" y2="24" stroke="var(--c-sync)" stroke-width="2"/><polygon points="10,34 3,20 17,20" fill="var(--c-sync)"/></svg>
+    </div>
+
+    <!-- STEP 2: HoldService transactional group -->
+    <div class="step" data-path="sync" style="padding-bottom:4px;">
+      <div class="step-head">
+        <span class="step-title">② HoldService.requestGeneration</span>
+        <span class="step-badge">SYNC</span>
+      </div>
+      <div class="classname">HoldService.requestGeneration</div>
+      <div class="filepath">job/service/HoldService.java</div>
+
+      <div class="txn-group" style="margin-top:14px;">
+        <span class="txn-label">@Transactional — 단일 DB 트랜잭션</span>
+        <div class="substep-list" style="margin-top:8px;">
+          <div class="substep">
+            <div class="idx">1</div>
+            <div class="body"><strong>validateRequest</strong> — idemKey 필수/100자 이하, prompt 필수/1000자 이하. 위반 시 <span class="err">InvalidRequestException → 400 INVALID_REQUEST</span></div>
+          </div>
+          <div class="substep">
+            <div class="idx">2</div>
+            <div class="body"><strong>idempotency_keys 조회</strong> (org_id, idem_key). 이미 있으면: jobId 있음 → <code>HoldResult(jobId, duplicate=true)</code> 로 기존 job 반환(멱등 성공) / jobId가 아직 null → <span class="err">DuplicateRequestInProgressException → 409 DUPLICATE_IN_PROGRESS</span></div>
+          </div>
+          <div class="substep">
+            <div class="idx">3</div>
+            <div class="body"><strong>IdempotencyKey INSERT</strong> — (org_id, idem_key) DB unique 제약. 동시 요청 충돌 시 <span class="err">DataIntegrityViolationException</span> → GlobalExceptionHandler가 409 DUPLICATE_IN_PROGRESS 로 변환. SELECT 후 INSERT가 아니라 <strong>unique 제약 위반 자체를 중복 판정으로 사용</strong></div>
+          </div>
+          <div class="substep">
+            <div class="idx">4</div>
+            <div class="body">비용 = <code>app.generation.cost</code> = <strong>100</strong></div>
+          </div>
+          <div class="substep">
+            <div class="idx">5</div>
+            <div class="body"><strong>OrganizationRepository.deductBalance</strong><br><code>UPDATE organization SET balance = balance - :amount WHERE id = :id AND balance >= :amount</code><br>0행이면 <span class="err">InsufficientBalanceException → 409 INSUFFICIENT_BALANCE</span>. 재시도 루프 없음</div>
+          </div>
+          <div class="substep">
+            <div class="idx">6</div>
+            <div class="body"><strong>job INSERT</strong> — status=HOLDING, attempt_no=0, hold_amount=100</div>
+          </div>
+          <div class="substep">
+            <div class="idx">7</div>
+            <div class="body"><strong>idempotencyKeyRepository.attachJobId</strong> 로 멱등키에 jobId 연결 (실패 시 <span class="err">IllegalStateException</span>)</div>
+          </div>
+          <div class="substep">
+            <div class="idx">8</div>
+            <div class="body"><strong>ledger INSERT</strong> — type=HOLD, amount=-100</div>
+          </div>
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-dim); margin:0 0 14px;">
+          여기까지가 하나의 DB 트랜잭션. 작업 큐가 같은 DB의 <code>jobs</code> 테이블이므로, 커밋되면 잔액 차감과 큐 투입(status=HOLDING)이 원자적으로 함께 확정된다. 별도 브로커로의 이중 쓰기가 없다.
+          응답: <code>JobCreateResponse(jobId, duplicate)</code> — 200. 클라이언트는 이 시점에 바로 응답을 받는다 (비동기).
+        </p>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <svg width="20" height="34" viewBox="0 0 20 34"><line x1="10" y1="0" x2="10" y2="24" stroke="var(--c-infra)" stroke-width="2"/><polygon points="10,34 3,20 17,20" fill="var(--c-infra)"/></svg>
+    </div>
+    <div class="arrow-label">jobs 테이블에 HOLDING 상태로 대기 (= 큐)</div>
+
+    <!-- STEP 3 -->
+    <div class="step" data-path="infra">
+      <div class="step-head">
+        <span class="step-title">③ GenerationWorker.processPendingJobs (폴링, 기본 500ms)</span>
+        <span class="step-badge">INFRA</span>
+      </div>
+      <div class="classname">GenerationWorker.processPendingJobs</div>
+      <div class="filepath">job/worker/GenerationWorker.java · @ConditionalOnExpression(app.scheduling.enabled and app.worker.enabled)</div>
+      <div class="step-desc">
+        <ul>
+          <li><code>@Scheduled(fixedDelay = app.scheduling.worker-interval-millis, 기본 500ms)</code></li>
+          <li><code>findByStatusOrderByIdAsc(HOLDING, PageRequest.of(0, app.worker.batch-size))</code> — 한 주기 조회 상한 20건. <code>jobs(status, id)</code> 인덱스가 이 조회를 받쳐준다</li>
+          <li>작업마다 <code>Semaphore.tryAcquire()</code>로 실행 슬롯을 <strong>먼저</strong> 확보한다. 없으면 이번 주기는 즉시 종료 — 실행되지 못할 job을 미리 PROCESSING으로 만들지 않는다</li>
+          <li><code>jobRepository.startProcessingIfAttemptMatches(jobId, attemptNo, now)</code><br><code>UPDATE job SET status='PROCESSING' WHERE id=? AND status='HOLDING' AND attempt_no=?</code> — <strong>선점 + attemptNo fencing</strong>. 0행이면 다른 워커가 이미 가져갔거나 무효한 시도이므로 건너뛴다. 여러 인스턴스가 같은 목록을 읽어도 실행은 하나뿐</li>
+          <li>선점 성공분만 <code>generationWorkerExecutor</code>로 위임. 위임이 거부되면 <code>transitionIfStatusAndAttemptMatch(HOLDING ← PROCESSING)</code>으로 즉시 되돌려 다음 폴링에서 다시 잡히게 한다 (롤백마저 실패하면 ⑦의 timeout 회수에 맡긴다)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <svg width="20" height="34" viewBox="0 0 20 34"><line x1="10" y1="0" x2="10" y2="24" stroke="var(--c-infra)" stroke-width="2"/><polygon points="10,34 3,20 17,20" fill="var(--c-infra)"/></svg>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="step" data-path="infra">
+      <div class="step-head">
+        <span class="step-title">④ generationWorkerExecutor (실행 슬롯)</span>
+        <span class="step-badge">INFRA</span>
+      </div>
+      <div class="classname">WorkerExecutorConfig.generationWorkerExecutor</div>
+      <div class="filepath">job/worker/WorkerExecutorConfig.java · job/worker/WorkerProperties.java</div>
+      <div class="step-desc">
+        <ul>
+          <li>core/max pool = <code>app.worker.concurrency</code>(3), <strong><code>queueCapacity = 0</code></strong> — executor는 대기열을 갖지 않는다. 대기열 역할은 DB의 HOLDING 상태가 한다</li>
+          <li>같은 값으로 만든 <code>Semaphore</code> permit이 동시 실행 상한을 지키고, permit은 실행 종료 시 <code>finally</code>에서 반드시 반납된다</li>
+          <li>폴링 스레드와 분리된 풀(<code>generation-worker-*</code>)이라 3~7초짜리 외부 호출이 스케줄러를 붙들지 않는다. <code>spring.task.scheduling.pool.size=2</code>로 워커 폴링과 ⑦의 스캔도 서로 밀리지 않게 분리</li>
+          <li><code>WorkerProperties</code>가 <code>batch-size</code>·<code>concurrency</code>를 기동 시점에 검증한다 (1 미만이면 시작 실패)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <svg width="20" height="34" viewBox="0 0 20 34"><line x1="10" y1="0" x2="10" y2="24" stroke="var(--c-infra)" stroke-width="2"/><polygon points="10,34 3,20 17,20" fill="var(--c-infra)"/></svg>
+    </div>
+
+    <!-- STEP 5 -->
+    <div class="step" data-path="infra">
+      <div class="step-head">
+        <span class="step-title">⑤ GenerationJobProcessor.process (워커 스레드)</span>
+        <span class="step-badge">INFRA</span>
+      </div>
+      <div class="classname">GenerationJobProcessor.process</div>
+      <div class="filepath">job/worker/GenerationJobProcessor.java</div>
+      <div class="step-desc">
+        <ul>
+          <li>이미 ③에서 PROCESSING으로 선점된 job만 넘어온다. 폴링·선점과 오래 걸리는 외부 호출의 lifecycle을 분리한 클래스</li>
+          <li><code>heartbeatRegistry.startHeartbeat(jobId)</code> — Redis sorted set에 ZADD, <code>app.heartbeat.refresh-interval-seconds</code>(5초) 주기 갱신 시작</li>
+          <li><code>stubClient.generate(prompt)</code> — 지연 3~7초 + 실패율 30% (<code>app.stub.*</code>)</li>
+          <li>성공 → <code>ConfirmService.confirm(jobId, attemptNo, resultUrl)</code> / <code>StubGenerationException</code> → <code>FailureService.markFailed(jobId, attemptNo)</code></li>
+          <li>생성은 됐는데 <strong>결과 반영(confirm)이 실패</strong>하면 200ms 간격으로 최대 3회 재시도. 그래도 실패하면 FAILED로 바꾸지 않고 PROCESSING에 남겨, ⑦의 timeout 회수 경로 한 곳으로 다음 시도를 몰아준다</li>
+          <li><code>finally</code> → <code>heartbeatRegistry.stopHeartbeat</code> (가장 바깥에서만 제거해 재시도 중에도 heartbeat가 살아 있게 한다)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <svg width="40" height="34" viewBox="0 0 40 34"><line x1="20" y1="0" x2="20" y2="24" stroke="var(--text-faint)" stroke-width="2"/><polygon points="20,34 13,20 27,20" fill="var(--text-faint)"/></svg>
+    </div>
+    <div class="arrow-label">stub 결과에 따라 분기</div>
+
+    <!-- STEP 6 branch -->
+    <div class="branch-row">
+      <div class="branch-col">
+        <div class="step" data-path="success">
+          <div class="step-head">
+            <span class="step-title">⑥-A 성공 경로</span>
+            <span class="step-badge">SUCCESS</span>
+          </div>
+          <div class="classname">ConfirmService.confirm</div>
+          <div class="filepath">job/service/ConfirmService.java · @Transactional</div>
+          <div class="step-desc">
+            <ul>
+              <li><code>completeIfAttemptMatches(jobId, resultUrl, attemptNo, now)</code> — 0행이면 무효화된 시도로 보고 무시</li>
+              <li>ledger INSERT type=CONFIRM, amount=0 (HOLD로 이미 차감됐으므로 금액 이동 없음)</li>
+              <li>job status = <strong>COMPLETED</strong>. 끝</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="branch-col">
+        <div class="step" data-path="fail">
+          <div class="step-head">
+            <span class="step-title">⑥-B 실패 경로</span>
+            <span class="step-badge">FAIL</span>
+          </div>
+          <div class="classname">FailureService.markFailed</div>
+          <div class="filepath">job/service/FailureService.java · @Transactional</div>
+          <div class="step-desc">
+            <ul>
+              <li><code>transitionIfStatusAndAttemptMatch(jobId, FAILED, PROCESSING, attemptNo, now)</code> — 0행이면 무시</li>
+              <li>job status = <strong>FAILED</strong> → 이후 스케줄러가 재검토</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down loop-back">
+      <svg width="20" height="44" viewBox="0 0 20 44"><line x1="10" y1="0" x2="10" y2="34" stroke="var(--c-fail)" stroke-width="2"/><polygon points="10,44 3,30 17,30" fill="var(--c-fail)"/></svg>
+    </div>
+
+    <!-- STEP 7 -->
+    <div class="step" data-path="infra">
+      <div class="step-head">
+        <span class="step-title">⑦ DeadJobSchedulerTask.scan (5초 주기)</span>
+        <span class="step-badge">INFRA</span>
+      </div>
+      <div class="classname">DeadJobSchedulerTask.scan</div>
+      <div class="filepath">global/scheduler/DeadJobSchedulerTask.java · @Scheduled(fixedDelay = app.scheduling.dead-job-scan-interval-millis, 기본 5000ms)</div>
+      <div class="step-desc">
+        <ul>
+          <li><strong>1.</strong> <code>heartbeatRegistry.findExpiredJobIds()</code> → <code>markExpiredAsFailed</code>: heartbeat 만료된 PROCESSING job을 FAILED로 전이 (워커 크래시 회수)</li>
+          <li><strong>2.</strong> <code>reapStaleProcessing()</code>: <code>app.processing.timeout-seconds</code>(60초) 넘은 PROCESSING job 중 <strong>살아있는 heartbeat가 없는 것만</strong> FAILED로 회수 (Redis 장애 / 선점 직후 위임·롤백 실패 / heartbeat 등록 전 크래시 / ⑤의 confirm 재시도 소진을 모두 커버)</li>
+          <li><strong>3.</strong> 모든 FAILED job에 대해 <code>process(job)</code>: 다시 findById 해서 여전히 FAILED인지 재확인(아니면 skip) → <code>attempt_no + 1 &lt; app.generation.max-attempts(3)</code> 이면 <code>RetryService.retry</code>, 아니면 <code>RefundService.finalRefund</code></li>
+          <li>HOLDING은 <strong>회수 대상이 아니다.</strong> 발행 실패 상태가 아니라 정상적인 큐 대기 상태이므로 경과 시간만으로 실패 처리하지 않고, 워커가 멈춰 있던 동안 쌓인 job은 재기동 후 ③에서 그대로 처리된다</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <svg width="40" height="34" viewBox="0 0 40 34"><line x1="20" y1="0" x2="20" y2="24" stroke="var(--text-faint)" stroke-width="2"/><polygon points="20,34 13,20 27,20" fill="var(--text-faint)"/></svg>
+    </div>
+    <div class="arrow-label">attempt_no 로 재시도 가능 여부 판단</div>
+
+    <!-- STEP 8 branch -->
+    <div class="branch-row">
+      <div class="branch-col">
+        <div class="step" data-path="fail">
+          <div class="step-head">
+            <span class="step-title">⑧-A RetryService.retry</span>
+            <span class="step-badge">RETRY</span>
+          </div>
+          <div class="classname">RetryService.retry</div>
+          <div class="filepath">job/service/RetryService.java · @Transactional</div>
+          <div class="step-desc">
+            <ul>
+              <li><code>incrementAttemptForRetry(jobId, attemptNo, now)</code>: <code>UPDATE job SET attempt_no=attempt_no+1, status='HOLDING' WHERE id=? AND status='FAILED' AND attempt_no=?</code> — 0행이면 다른 스케줄러 인스턴스와의 경쟁에서 밀린 것이므로 그냥 종료</li>
+              <li>같은 UPDATE 하나로 시도 번호 증가와 <strong>큐 재투입(HOLDING 복귀)</strong>이 함께 끝난다. 별도 메시지 발행이 없으므로 재투입이 유실될 수 없다 → <strong>③으로 되돌아감 (루프)</strong></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="branch-col">
+        <div class="step" data-path="refund">
+          <div class="step-head">
+            <span class="step-title">⑧-B RefundService.finalRefund</span>
+            <span class="step-badge">FINAL</span>
+          </div>
+          <div class="classname">RefundService.finalRefund</div>
+          <div class="filepath">job/service/RefundService.java · @Transactional</div>
+          <div class="step-desc">
+            <ul>
+              <li><code>transitionIfStatusAndAttemptMatch(jobId, REFUNDED, FAILED, attemptNo, now)</code>: 0행이면 <strong>늦게 도착한 워커가 이미 COMPLETED로 바꿔놓은 것</strong>이므로 환불을 취소하고 종료 (이중 환불 방지)</li>
+              <li><code>organizationRepository.addBalance(orgId, holdAmount, now)</code>: <code>UPDATE organization SET balance = balance + :amount WHERE id = :id</code>. 0행이면 <code>IllegalStateException</code></li>
+              <li>ledger INSERT type=REFUND, amount=+100</li>
+              <li>job status = <strong>REFUNDED</strong>. 끝</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <svg width="20" height="34" viewBox="0 0 20 34"><line x1="10" y1="0" x2="10" y2="24" stroke="var(--c-sync)" stroke-width="2"/><polygon points="10,34 3,20 17,20" fill="var(--c-sync)"/></svg>
+    </div>
+
+    <!-- STEP 9 -->
+    <div class="step" data-path="sync">
+      <div class="step-head">
+        <span class="step-title">⑨ 클라이언트 폴링</span>
+        <span class="step-badge">SYNC</span>
+      </div>
+      <div class="classname">JobApiController · OrganizationApiController · LedgerApiController</div>
+      <div class="filepath">job/controller/JobApiController.java · organization/controller/OrganizationApiController.java · ledger/controller/LedgerApiController.java</div>
+      <div class="step-desc">
+        대시보드가 3초마다 <code>GET /api/jobs</code> 로 job 목록/상태 조회, <code>GET /api/organizations/.../balance</code>, <code>GET /api/ledger</code>로 잔액·원장 갱신.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= STATE DIAGRAM ================= -->
+<section id="state-diagram">
+  <h2 class="section-title"><span class="num">2</span>상태 전이도</h2>
+  <p class="section-desc">Job status 전이. attempt_no가 재시도 가능 여부를 결정하는 fencing 토큰 역할을 겸한다.</p>
+  <div class="state-diagram">
+    <div class="state-row">
+      <div class="state-node holding">HOLDING</div>
+      <div class="state-arrow-h">→</div>
+      <div class="state-node processing">PROCESSING</div>
+      <div class="state-arrow-h">→</div>
+      <div class="state-node completed">COMPLETED</div>
+    </div>
+    <div class="state-row" style="margin-top:14px;">
+      <div class="state-node" style="visibility:hidden;">HOLDING</div>
+      <div class="state-arrow-h" style="visibility:hidden;">→</div>
+      <div class="state-node" style="visibility:hidden;">PROCESSING</div>
+      <div class="state-arrow-h">↘</div>
+      <div class="state-node failed">FAILED</div>
+    </div>
+    <div class="retry-loop">FAILED → (retry, attempt_no+1 &lt; max-attempts) → HOLDING 으로 큐 재투입</div>
+    <div class="state-row" style="margin-top:14px;">
+      <div class="state-node" style="visibility:hidden;">HOLDING</div>
+      <div class="state-arrow-h" style="visibility:hidden;">→</div>
+      <div class="state-node" style="visibility:hidden;">PROCESSING</div>
+      <div class="state-arrow-h">↘</div>
+      <div class="state-node refunded">REFUNDED</div>
+    </div>
+    <div class="branch-note">FAILED → (attempt_no+1 ≥ max-attempts, 최종 실패) → REFUNDED — 이 전이 이후 job은 종결 상태이며 더 이상 변하지 않는다</div>
+  </div>
+</section>
+
+<!-- ================= 조건부 연산 테이블 ================= -->
+<section id="conditional-ops">
+  <h2 class="section-title"><span class="num">3</span>핵심 설계 원칙: 조건부 연산</h2>
+  <p class="section-desc">check-then-act(조회 후 판단 후 실행) 대신, 확인과 실행을 조건부 UPDATE/INSERT 하나로 원자화한다. 동시성 문제를 락이 아니라 SQL의 원자성으로 해결.</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>문제 상황</th><th>조건부 연산</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>동시 잔액 차감</td>
+          <td><pre class="sql">UPDATE organization SET balance = balance - :amount
+WHERE id = :id AND balance >= :amount
+-- deductBalance</pre></td>
+        </tr>
+        <tr>
+          <td>잔액 증액 (환불/충전)</td>
+          <td><pre class="sql">UPDATE organization SET balance = balance + :amount
+WHERE id = :id
+-- addBalance</pre></td>
+        </tr>
+        <tr>
+          <td>이중 결과 쓰기 (재시도 워커 vs 원래 워커)</td>
+          <td><pre class="sql">UPDATE job SET status = ?
+WHERE id = ? AND attempt_no = ?
+-- attemptNo fencing</pre></td>
+        </tr>
+        <tr>
+          <td>중복 요청</td>
+          <td><pre class="sql">-- idempotency_keys 의 (org_id, idem_key) unique 제약
+-- 위반을 중복 판정으로 사용</pre></td>
+        </tr>
+        <tr>
+          <td>최종 refund vs 늦은 워커 성공</td>
+          <td><pre class="sql">UPDATE job SET status = 'REFUNDED'
+WHERE id = ? AND status = 'FAILED' AND attempt_no = ?</pre></td>
+        </tr>
+        <tr>
+          <td>스케줄러 다중 인스턴스 재시도 경합</td>
+          <td><pre class="sql">UPDATE job SET attempt_no = attempt_no + 1
+WHERE id = ? AND status = 'FAILED' AND attempt_no = ?</pre></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= ERROR MAPPING ================= -->
+<section id="error-mapping">
+  <h2 class="section-title"><span class="num">4</span>에러 / 응답 매핑</h2>
+  <p class="section-desc">GlobalExceptionHandler 가 도메인 예외를 HTTP 응답으로 변환하는 규칙.</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>예외</th><th>HTTP</th><th>code</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">InsufficientBalanceException</td>
+          <td><span class="badge-status badge-409">409</span></td>
+          <td class="mono">INSUFFICIENT_BALANCE</td>
+        </tr>
+        <tr>
+          <td class="mono">DuplicateRequestInProgressException</td>
+          <td><span class="badge-status badge-409">409</span></td>
+          <td class="mono">DUPLICATE_IN_PROGRESS</td>
+        </tr>
+        <tr>
+          <td class="mono">InvalidRequestException</td>
+          <td><span class="badge-status badge-400">400</span></td>
+          <td class="mono">INVALID_REQUEST</td>
+        </tr>
+        <tr>
+          <td class="mono">DataIntegrityViolationException</td>
+          <td><span class="badge-status badge-409">409</span></td>
+          <td class="mono">DUPLICATE_IN_PROGRESS</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= DATA MODEL / TIMELINE ================= -->
+<section id="data-model">
+  <h2 class="section-title"><span class="num">5</span>데이터 모델 / 부수 효과 타임라인</h2>
+  <p class="section-desc">4개 테이블 — organization, job, idempotency_keys, ledger — 이 각 단계에서 어떻게 바뀌는지. 작업 큐도 별도 저장소가 아니라 job 테이블 자체다.</p>
+
+  <div class="table-scroll" style="margin-bottom:24px;">
+    <table>
+      <thead>
+        <tr><th>테이블</th><th>주요 컬럼</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">organization</td><td class="mono">id, balance, version, updated_at</td></tr>
+        <tr><td class="mono">job</td><td class="mono">id, org_id, status(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED), attempt_no(fencing 토큰), hold_amount, updated_at(heartbeat 겸용) — 배치 폴링용 idx_jobs_status_id(status, id) 인덱스</td></tr>
+        <tr><td class="mono">idempotency_keys</td><td class="mono">id, org_id, idem_key((org_id,idem_key) unique), job_id — 자체 status 없이 job.status 참조</td></tr>
+        <tr><td class="mono">ledger</td><td class="mono">id, org_id, job_id, type(HOLD/CONFIRM/REFUND/CHARGE), amount, created_at — insert-only</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-row">
+      <div class="tl-step-label">② HoldService<br><span style="color:var(--text-faint); font-weight:400;">requestGeneration</span></div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-read">READ</span>idempotency_keys</span>
+        <span class="tl-chip"><span class="op op-insert">INSERT</span>idempotency_keys</span>
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>organization.balance</span>
+        <span class="tl-chip"><span class="op op-insert">INSERT</span>job (HOLDING)</span>
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>idempotency_keys.job_id</span>
+        <span class="tl-chip"><span class="op op-insert">INSERT</span>ledger (HOLD, -100)</span>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-step-label">③ GenerationWorker<br><span style="color:var(--text-faint); font-weight:400;">processPendingJobs</span></div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-read">READ</span>job (HOLDING, batch-size)</span>
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → PROCESSING</span>
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.updated_at (선점 시각)</span>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-step-label">⑤ GenerationJobProcessor</div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>redis heartbeats (ZADD)</span>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-step-label">⑥-A ConfirmService</div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → COMPLETED</span>
+        <span class="tl-chip"><span class="op op-insert">INSERT</span>ledger (CONFIRM, 0)</span>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-step-label">⑥-B FailureService</div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → FAILED</span>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-step-label">⑦ DeadJobSchedulerTask</div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → FAILED (heartbeat/timeout 회수)</span>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-step-label">⑧-A RetryService</div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.attempt_no += 1</span>
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → HOLDING (재투입)</span>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-step-label">⑧-B RefundService</div>
+      <div class="tl-tables">
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → REFUNDED</span>
+        <span class="tl-chip"><span class="op op-update">UPDATE</span>organization.balance += 100</span>
+        <span class="tl-chip"><span class="op op-insert">INSERT</span>ledger (REFUND, +100)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Credit System 내부 문서 — docs/request-flow.html
+</footer>
+
+</div>
+
+<script>
+  function toggleFilter(kind){
+    var body = document.body;
+    var isActive = body.classList.contains('filter-' + kind);
+    body.classList.remove('filter-success', 'filter-fail');
+    document.getElementById('btn-success').classList.remove('active');
+    document.getElementById('btn-fail').classList.remove('active');
+    if(!isActive){
+      body.classList.add('filter-' + kind);
+      document.getElementById('btn-' + kind).classList.add('active');
+    }
+  }
+  function resetFilter(){
+    document.body.classList.remove('filter-success', 'filter-fail');
+    document.getElementById('btn-success').classList.remove('active');
+    document.getElementById('btn-fail').classList.remove('active');
+  }
+</script>
+
+</body>
+</html>

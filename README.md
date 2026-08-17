@@ -3,7 +3,7 @@
 Organization이 공유하는 크레딧을 선결제/차감하고, 비동기 이미지 생성(stub) 실패 시 정확히 환불하는 것을
 목표로 한 포트폴리오 프로젝트다. 핵심 주장은 "크레딧은 항상 정확하게 차감·환불된다"이며, 이를
 check-then-act 대신 **조건부 UPDATE/INSERT 하나로 확인+실행을 원자화**하는 설계 원칙과 attemptNo
-fencing으로 보장하고, Testcontainers/EmbeddedKafka 기반 동시성·E2E 테스트(총 58건)로 증명한다.
+fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트(총 58건)로 증명한다.
 이미지 생성 자체는 관심사가 아니므로 지연+확률적 실패를 가진 `GenerationStubClient`로 대체돼 있다.
 
 ## 1. 프로젝트 개요
@@ -32,8 +32,8 @@ fencing으로 보장하고, Testcontainers/EmbeddedKafka 기반 동시성·E2E �
 
 ## 2. 기술 스택
 
-Spring Boot 4.1 (Java 17) / Spring Data JPA / Spring Kafka / Spring Data Redis / Thymeleaf / MySQL /
-H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis) / EmbeddedKafka
+Spring Boot 4.1 (Java 17) / Spring Data JPA / Spring Data Redis / Thymeleaf / MySQL /
+H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 
 ## 3. 아키텍처와 처리 흐름
 
@@ -41,31 +41,35 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis) / Embedde
 [클라이언트] --POST /api/jobs(idemKey)--> [HoldService]
                                               │  1. idempotency_keys INSERT (unique 위반 = 중복)
                                               │  2. organization.balance 조건부 차감 UPDATE
-                                              │  3. job(HOLDING) / ledger(HOLD) / outbox INSERT
+                                              │  3. job(HOLDING) / ledger(HOLD) INSERT
                                               ▼
-                                        [OutboxRelay] (폴링)
-                                              │  send().get(10s)로 브로커 ack 확인 후 markSent
+                                    jobs 테이블 = 영속 작업 큐 (status=HOLDING)
                                               ▼
-                                       Kafka: generation-jobs 토픽
+                                     [GenerationWorker] (@Scheduled 폴링, 기본 500ms)
+                                              │  HOLDING job을 app.worker.batch-size(20)건까지 조회
+                                              │  startProcessingIfAttemptMatches 조건부 UPDATE로 선점
+                                              │  전용 executor(concurrency 3, 내부 큐 없음)로 위임
                                               ▼
-                                     [GenerationWorker] (컨슈머)
-                                              │  Redis heartbeat 등록(ZADD) + job PROCESSING 전이
+                                    [GenerationJobProcessor] (워커 스레드)
+                                              │  Redis heartbeat 등록(ZADD) + 주기 갱신
                                               │  GenerationStubClient.generate() 호출
                                               ├─ 성공 → ConfirmService (job COMPLETED, ledger CONFIRM)
-                                              └─ 실패 → FailureService (job FAILED)
+                                              ├─ 생성 실패 → FailureService (job FAILED)
+                                              └─ 결과 반영 실패 → 3회 재시도 후 PROCESSING 유지(회수 경로에 위임)
                                               ▼
-                                    [DeadJobSchedulerTask] (스케줄러, 주기 폴링)
-                                              │  reapStaleHolding: 정체된 HOLDING → FAILED 회수
+                                    [DeadJobSchedulerTask] (스케줄러, 기본 5초 주기)
+                                              │  heartbeat 만료 PROCESSING → FAILED 회수
                                               │  reapStaleProcessing: heartbeat 없는 PROCESSING → FAILED 회수
                                               ▼
                                      FAILED job 재검토
-                                       ├─ attempt_no < 3 → RetryService: attempt_no+1, outbox 재투입
+                                       ├─ attempt_no + 1 < 3 → RetryService: attempt_no+1 후 HOLDING으로 큐 재투입
                                        └─ attempt_no 소진 → RefundService.finalRefund
                                                               (job REFUNDED, balance 환불, ledger REFUND)
 ```
 
-poison message(반복 실패)는 Kafka `DefaultErrorHandler` + `DeadLetterPublishingRecoverer`가
-`generation-jobs.DLT`로 격리해 정상 메시지 처리를 막지 않는다.
+작업 큐가 DB 안에 있으므로 크레딧 차감·job 등록·ledger 기록이 하나의 트랜잭션으로 커밋되고, DB와
+브로커 사이의 이중 쓰기 문제가 없다. 반복 실패하는 작업은 `app.generation.max-attempts`(3) 상한에
+걸려 환불로 종결되므로 큐에 영구히 남아 처리량을 잠식하지 않는다.
 
 ## 4. 핵심 설계 원칙
 
@@ -85,35 +89,40 @@ poison message(반복 실패)는 Kafka `DefaultErrorHandler` + `DeadLetterPublis
 
 ## 5. 데이터 모델
 
-5개 테이블로 구성된다.
+4개 테이블로 구성된다.
 
-- **organization**: `id`, `balance`, `version`, `updated_at` — 잔액을 이 컬럼으로 직접 관리
+- **organization**: `id`, `balance`, `updated_at` — 잔액을 이 컬럼으로 직접 관리
 - **job**: `id`, `org_id`, `status`(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED), `attempt_no`(fencing
-  토큰), `hold_amount`, `updated_at`(heartbeat 용도로도 사용)
+  토큰), `hold_amount`, `updated_at`(heartbeat 용도로도 사용) — 작업 큐를 겸하므로 워커의 배치 폴링
+  (status 필터 + id 정렬)을 위해 `idx_jobs_status_id(status, id)` 인덱스를 둔다
 - **idempotency_keys**: `id`, `org_id`, `idem_key`(org_id와 함께 unique), `job_id` — 자체 status 없이
   job.status를 참조
 - **ledger**: `id`, `org_id`, `job_id`, `type`(HOLD/CONFIRM/REFUND/CHARGE), `amount`, `created_at` —
   insert-only, 수정 없음
-- **outbox**: `id`, `job_id`, `payload`, `sent`, `created_at`
 
-관계: `organization 1—N job`, `job 1—0/1 idempotency_keys`, `job 1—N ledger`, `job 1—0/1 outbox`
+관계: `organization 1—N job`, `job 1—0/1 idempotency_keys`, `job 1—N ledger`
 
 ## 6. 신뢰성 장치
 
-- **Outbox + 브로커 ack 확인**: `OutboxRelay`가 폴링해 Kafka 발행 후 `send().get(10s)`으로 ack를
-  확인한 뒤에만 `markSent` — DB와 메시지 큐 간 불일치 방지
-- **DLT 격리**: `DefaultErrorHandler` + `DeadLetterPublishingRecoverer`(`KafkaConsumerConfig`)가
-  poison message를 `generation-jobs.DLT`로 격리해 파티션이 막히지 않게 한다
-  (검증: `GenerationWorkerDltTest`)
-- **`reapStaleHolding`**: 오래 갱신되지 않은 HOLDING job을 FAILED로 회수 — outbox 발행 실패/유실로
-  인한 영구 정체 방지
+- **DB 작업 큐 + 조건부 선점**: 크레딧 차감·job(HOLDING)·ledger가 한 트랜잭션으로 커밋되므로 큐 투입이
+  유실될 수 없다. 워커는 `startProcessingIfAttemptMatches`(`status='HOLDING' AND attempt_no=?` 조건부
+  UPDATE)로 선점하고, 0행이면 다른 워커가 이미 가져간 것으로 보고 건너뛴다 — 같은 목록을 여러 인스턴스가
+  읽어도 실행은 하나뿐
+- **HOLDING은 회수 대상이 아님**: HOLDING은 발행 실패 상태가 아니라 정상적인 큐 대기 상태이므로 경과
+  시간만으로 실패 처리하지 않는다. 워커가 꺼져 있는 동안 쌓인 job은 재기동 후 다음 폴링에서 그대로 처리된다
 - **`reapStaleProcessing`**: `app.processing.timeout-seconds`(60초) 초과했는데 살아있는 heartbeat가
-  없는 PROCESSING job을 FAILED로 회수 — Redis 장애, DLT 격리 후 정체, heartbeat 등록 전 워커 크래시를
-  모두 커버
-- **Heartbeat**: Redis sorted set에 워커가 처리 시작 시점(job consume 시점)에 등록, 공유 스케줄러가
-  주기 갱신 — job 수와 무관하게 O(1) 조회로 마감 지난 job만 스캔
-- **Kafka 파티션 단일 진실원천**: `app.kafka.partitions`(운영 3, 테스트 1)가 토픽 파티션 수,
-  `@KafkaListener` concurrency, heartbeat 풀 크기를 모두 연동해 정합성 유지
+  없는 PROCESSING job을 FAILED로 회수 — Redis 장애, 선점 직후 executor 위임 실패와 롤백 실패, heartbeat
+  등록 전 워커 크래시, 결과 반영(confirm) 재시도 소진을 모두 커버
+- **Heartbeat**: Redis sorted set에 워커가 실제 실행을 시작하는 시점(`GenerationJobProcessor.process`)에
+  등록하고 `app.heartbeat.refresh-interval-seconds`(5초)마다 갱신 — job 수와 무관하게 O(1) 조회로 마감
+  지난 job만 스캔. Redis 장애 중에는 회수를 억제하되, 억제가
+  `app.heartbeat.suppression-alert-seconds`(60초)를 넘기면 ERROR로 경보한다
+- **워커 동시 실행 상한**: `app.worker.concurrency`(3)가 전용 executor(`generationWorkerExecutor`)의
+  스레드 수와 `Semaphore` permit 수를 함께 결정하고, executor 내부 큐 용량은 0이다 — 대기열 역할은 DB의
+  HOLDING 상태가 하므로 선점만 해두고 실행되지 않는 job이 생기지 않는다. `app.worker.batch-size`(20)는
+  한 폴링 주기의 조회 상한이고, `spring.task.scheduling.pool.size`(2)는 워커 폴링과
+  `DeadJobSchedulerTask`가 같은 스케줄러 스레드를 두고 경합하지 않게 한다. 두 값은 `WorkerProperties`가
+  기동 시점에 검증한다(1 미만이면 시작 실패)
 
 ## 7. 프로젝트 구조
 
@@ -131,16 +140,14 @@ com.example.credit_system
 ├── global/
 │   ├── auth/                        # LoginInterceptor, SessionConst
 │   ├── config/
-│   │   ├── AppProperties.java       # app.kafka.partitions, app.processing.timeout-seconds 등
+│   │   ├── AppProperties.java       # app.generation / stub / heartbeat / processing 바인딩·검증
 │   │   ├── DataSeeder.java          # alice/bob 데모 계정 시딩
-│   │   ├── KafkaConsumerConfig.java # DefaultErrorHandler + DeadLetterPublishingRecoverer
-│   │   ├── KafkaTopicConfig.java
 │   │   ├── PasswordEncoderConfig.java
 │   │   └── WebConfig.java
 │   ├── domain/BaseEntity.java       # 공통 엔티티 베이스(감사 필드 등)
 │   ├── exception/                   # GlobalExceptionHandler 등
 │   └── scheduler/
-│       ├── DeadJobSchedulerTask.java  # reapStaleHolding / reapStaleProcessing / 재시도·최종환불 투입
+│       ├── DeadJobSchedulerTask.java  # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
 │       └── HeartbeatRegistry.java    # Redis sorted-set heartbeat
 ├── job/
 │   ├── controller/JobApiController.java
@@ -151,25 +158,25 @@ com.example.credit_system
 │   │   ├── HoldService.java, HoldResult.java   # 요청 접수(hold) 트랜잭션
 │   │   ├── ConfirmService.java                 # 성공 확정
 │   │   ├── FailureService.java                 # 실패 전이
-│   │   ├── RetryService.java                   # attempt_no 증가 후 재투입
+│   │   ├── RetryService.java                   # attempt_no 증가 후 HOLDING 재투입
 │   │   └── RefundService.java                  # 최종 환불(finalRefund)
 │   ├── stub/GenerationStubClient.java, StubGenerationException.java
-│   └── worker/GenerationWorker.java            # Kafka 컨슈머
+│   └── worker/
+│       ├── GenerationWorker.java               # DB 큐 폴링 + 조건부 UPDATE 선점
+│       ├── GenerationJobProcessor.java         # 선점된 작업의 외부 호출·결과 반영
+│       ├── WorkerExecutorConfig.java           # generationWorkerExecutor(큐 없는 bounded pool)
+│       └── WorkerProperties.java               # app.worker.* 바인딩·검증
 ├── ledger/
 │   ├── controller/LedgerApiController.java
 │   ├── domain/LedgerEntry.java, LedgerType.java
 │   ├── dto/LedgerResponse.java
 │   └── repository/LedgerRepository.java
-├── organization/
-│   ├── controller/OrganizationApiController.java
-│   ├── domain/Organization.java
-│   ├── dto/BalanceResponse.java, ChargeRequest.java
-│   ├── repository/OrganizationRepository.java  # deductBalance / addBalance 조건부 UPDATE
-│   └── service/ChargeService.java
-└── outbox/
-    ├── domain/GenerationJobMessage.java, OutboxEntry.java
-    ├── repository/OutboxRepository.java
-    └── service/OutboxRelay.java, OutboxWriter.java
+└── organization/
+    ├── controller/OrganizationApiController.java
+    ├── domain/Organization.java
+    ├── dto/BalanceResponse.java, ChargeRequest.java
+    ├── repository/OrganizationRepository.java  # deductBalance / addBalance 조건부 UPDATE
+    └── service/ChargeService.java
 ```
 
 
