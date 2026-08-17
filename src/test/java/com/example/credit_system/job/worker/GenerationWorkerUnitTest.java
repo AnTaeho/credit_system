@@ -11,8 +11,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -38,7 +36,6 @@ class GenerationWorkerUnitTest {
     @Test
     void 대기_작업을_DB에서_찾아_선점한_뒤_처리기로_넘긴다() {
         when(jobRepository.findByStatusOrderByIdAsc(any())).thenReturn(List.of(job));
-        when(jobRepository.findById(1L)).thenReturn(Optional.of(job));
         when(jobRepository.startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class))).thenReturn(1);
 
         worker.processPendingJobs();
@@ -48,10 +45,9 @@ class GenerationWorkerUnitTest {
 
     @Test
     void 다른_워커가_선점한_작업은_외부_처리기로_넘기지_않는다() {
-        when(jobRepository.findById(1L)).thenReturn(Optional.of(job));
         when(jobRepository.startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class))).thenReturn(0);
 
-        worker.claimAndProcess(1L);
+        worker.claimAndProcess(job);
 
         verify(jobProcessor, never()).process(job);
     }
