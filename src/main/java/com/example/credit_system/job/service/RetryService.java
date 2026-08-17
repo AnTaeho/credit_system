@@ -2,7 +2,6 @@ package com.example.credit_system.job.service;
 
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.repository.JobRepository;
-import com.example.credit_system.outbox.service.OutboxWriter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,9 +15,8 @@ import java.time.Instant;
 public class RetryService {
 
     private final JobRepository jobRepository;
-    private final OutboxWriter outboxWriter;
 
-    /** 실패한 작업의 시도 번호를 높여 재처리 메시지를 등록한다. */
+    /** 실패한 작업의 시도 번호를 높여 DB 작업 큐에 다시 대기시킨다. */
     @Transactional
     public void retry(Job job) {
         int updated = jobRepository.incrementAttemptForRetry(job.getId(), job.getAttemptNo(), Instant.now());
@@ -27,7 +25,6 @@ public class RetryService {
             return;
         }
         int newAttemptNo = job.getAttemptNo() + 1;
-        outboxWriter.write(job.getId(), job.getOrganizationId(), newAttemptNo, job.getPrompt());
         log.info("재시도 투입: jobId={}, newAttemptNo={}", job.getId(), newAttemptNo);
     }
 }

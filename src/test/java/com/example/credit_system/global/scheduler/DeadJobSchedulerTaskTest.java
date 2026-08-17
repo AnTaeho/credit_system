@@ -6,7 +6,6 @@ import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.job.service.RefundService;
 import com.example.credit_system.job.service.RetryService;
-import com.example.credit_system.outbox.repository.OutboxRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,9 +35,6 @@ class DeadJobSchedulerTaskTest {
     JobRepository jobRepository;
 
     @Mock
-    OutboxRepository outboxRepository;
-
-    @Mock
     RetryService retryService;
 
     @Mock
@@ -49,9 +45,8 @@ class DeadJobSchedulerTaskTest {
     @BeforeEach
     void setUp() {
         AppProperties appProperties = new AppProperties(
-                new AppProperties.Generation(100L, 3), null, null, null,
-                new AppProperties.Holding(60), new AppProperties.Processing(60));
-        task = new DeadJobSchedulerTask(heartbeatRegistry, jobRepository, outboxRepository, retryService, refundService, appProperties);
+                new AppProperties.Generation(100L, 3), null, null, new AppProperties.Processing(60));
+        task = new DeadJobSchedulerTask(heartbeatRegistry, jobRepository, retryService, refundService, appProperties);
         when(heartbeatRegistry.findExpiredJobIds()).thenReturn(Set.of());
         when(jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)).thenReturn(List.of());
     }
@@ -77,54 +72,10 @@ class DeadJobSchedulerTaskTest {
         return job;
     }
 
-    @Test
-    void 정체된_HOLDING_job은_FAILED로_전이를_시도한다() {
-        Job job = staleHoldingJob(10L);
-        when(jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.HOLDING), any(Instant.class)))
-                .thenReturn(List.of(job));
-        when(jobRepository.transitionIfStatusAndAttemptMatch(
-                eq(10L), eq(JobStatus.FAILED), eq(JobStatus.HOLDING), anyInt(), any(Instant.class)))
-                .thenReturn(1);
-
-        task.scan();
-
-        verify(jobRepository).transitionIfStatusAndAttemptMatch(
-                eq(10L), eq(JobStatus.FAILED), eq(JobStatus.HOLDING), eq(0), any(Instant.class));
-    }
-
-    @Test
-    void 전이가_경합으로_0행이어도_예외없이_진행한다() {
-        Job job = staleHoldingJob(11L);
-        when(jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.HOLDING), any(Instant.class)))
-                .thenReturn(List.of(job));
-        when(jobRepository.transitionIfStatusAndAttemptMatch(
-                eq(11L), eq(JobStatus.FAILED), eq(JobStatus.HOLDING), anyInt(), any(Instant.class)))
-                .thenReturn(0);
-
-        task.scan();
-
-        verify(jobRepository).transitionIfStatusAndAttemptMatch(
-                eq(11L), eq(JobStatus.FAILED), eq(JobStatus.HOLDING), eq(0), any(Instant.class));
-    }
-
-    @Test
-    void 정체된_HOLDING_job이라도_미발송_outbox가_있으면_회수하지_않는다() {
-        Job job = staleHoldingJob(12L);
-        when(jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.HOLDING), any(Instant.class)))
-                .thenReturn(List.of(job));
-        when(outboxRepository.existsByJobIdAndSentFalse(12L)).thenReturn(true);
-
-        task.scan();
-
-        verify(jobRepository, never()).transitionIfStatusAndAttemptMatch(
-                eq(12L), eq(JobStatus.FAILED), eq(JobStatus.HOLDING), anyInt(), any(Instant.class));
-    }
 
     @Test
     void 정체된_PROCESSING_job은_heartbeat가_없으면_FAILED로_전이한다() {
         Job job = staleProcessingJob(20L);
-        when(jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.HOLDING), any(Instant.class)))
-                .thenReturn(List.of());
         when(jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.PROCESSING), any(Instant.class)))
                 .thenReturn(List.of(job));
         when(heartbeatRegistry.hasLiveHeartbeat(20L)).thenReturn(false);
@@ -142,8 +93,6 @@ class DeadJobSchedulerTaskTest {
     @Test
     void 정체된_PROCESSING_job이라도_live_heartbeat가_있으면_회수하지_않는다() {
         Job job = staleProcessingJob(21L);
-        when(jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.HOLDING), any(Instant.class)))
-                .thenReturn(List.of());
         when(jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.PROCESSING), any(Instant.class)))
                 .thenReturn(List.of(job));
         when(heartbeatRegistry.hasLiveHeartbeat(21L)).thenReturn(true);

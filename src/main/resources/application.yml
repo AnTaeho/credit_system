@@ -12,16 +12,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-  kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-    consumer:
-      group-id: generation-worker
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   data:
     redis:
       host: localhost
@@ -34,9 +24,6 @@ app:
     enabled: true
   seed:
     enabled: true
-  kafka:
-    topic: generation-jobs
-    partitions: 3
   generation:
     cost: 100
     max-attempts: 3
@@ -47,8 +34,6 @@ app:
   heartbeat:
     timeout-seconds: 10
     refresh-interval-seconds: 5
-  holding:
-    timeout-seconds: 60
   processing:
     timeout-seconds: 60
 

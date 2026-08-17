@@ -13,7 +13,6 @@ import com.example.credit_system.ledger.domain.LedgerType;
 import com.example.credit_system.ledger.repository.LedgerRepository;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
-import com.example.credit_system.outbox.service.OutboxWriter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,7 +30,6 @@ public class HoldService {
     private final OrganizationRepository organizationRepository;
     private final JobRepository jobRepository;
     private final LedgerRepository ledgerRepository;
-    private final OutboxWriter outboxWriter;
     private final AppProperties appProperties;
 
     /** 멱등성을 보장하며 비용을 차감하고 생성 작업을 등록한다. */
@@ -58,8 +56,6 @@ public class HoldService {
                     + ", idemKey=" + idemKey + ", jobId=" + job.getId());
         }
         ledgerRepository.save(LedgerEntry.of(organizationId, job.getId(), LedgerType.HOLD, -cost));
-        outboxWriter.write(job.getId(), organizationId, job.getAttemptNo(), prompt);
-
         log.info("hold 완료: organizationId={}, jobId={}, cost={}", organizationId, job.getId(), cost);
         return new HoldResult(job.getId(), false);
     }

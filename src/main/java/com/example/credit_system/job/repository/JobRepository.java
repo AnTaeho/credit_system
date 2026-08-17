@@ -13,7 +13,7 @@ import java.util.List;
 
 public interface JobRepository extends JpaRepository<Job, Long> {
 
-    /** 유효한 대기·처리 작업을 처리 상태로 선점한다. */
+    /** 대기 작업을 처리 상태로 원자적으로 선점한다. */
     @Transactional
     @Modifying(clearAutomatically = true)
     @Query("""
@@ -21,10 +21,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
             SET j.status = com.example.credit_system.job.domain.JobStatus.PROCESSING,
                 j.updatedAt = :now
             WHERE j.id = :jobId
-              AND j.status IN (
-                  com.example.credit_system.job.domain.JobStatus.HOLDING,
-                  com.example.credit_system.job.domain.JobStatus.PROCESSING
-              )
+              AND j.status = com.example.credit_system.job.domain.JobStatus.HOLDING
               AND j.attemptNo = :attemptNo
             """)
     int startProcessingIfAttemptMatches(@Param("jobId") Long jobId,

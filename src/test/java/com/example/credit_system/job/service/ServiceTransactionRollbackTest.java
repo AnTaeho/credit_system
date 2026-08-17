@@ -8,7 +8,6 @@ import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.ledger.repository.LedgerRepository;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
-import com.example.credit_system.outbox.repository.OutboxRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,12 +28,10 @@ class ServiceTransactionRollbackTest {
     @Autowired IdempotencyKeyRepository idempotencyKeyRepository;
     @Autowired JobRepository jobRepository;
     @Autowired LedgerRepository ledgerRepository;
-    @Autowired OutboxRepository outboxRepository;
     @Autowired OrganizationRepository organizationRepository;
 
     @AfterEach
     void tearDown() {
-        outboxRepository.deleteAll();
         ledgerRepository.deleteAll();
         idempotencyKeyRepository.deleteAll();
         jobRepository.deleteAll();
@@ -53,7 +50,6 @@ class ServiceTransactionRollbackTest {
                 organization.getId(), "rollback-key")).isEmpty();
         assertThat(jobRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
-        assertThat(outboxRepository.findBySentFalseOrderByIdAsc()).isEmpty();
         assertThat(organizationRepository.findById(organization.getId()).orElseThrow().getBalance())
                 .isEqualTo(50L);
     }

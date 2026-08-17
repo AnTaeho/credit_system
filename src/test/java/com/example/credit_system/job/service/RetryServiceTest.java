@@ -3,8 +3,6 @@ package com.example.credit_system.job.service;
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
-import com.example.credit_system.outbox.repository.OutboxRepository;
-import com.example.credit_system.outbox.service.OutboxWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,18 +19,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RetryServiceTest {
 
     @Autowired JobRepository jobRepository;
-    @Autowired OutboxRepository outboxRepository;
 
     RetryService retryService;
 
     @BeforeEach
     void setUp() {
-        OutboxWriter outboxWriter = new OutboxWriter(outboxRepository, new ObjectMapper());
-        retryService = new RetryService(jobRepository, outboxWriter);
+        retryService = new RetryService(jobRepository);
     }
 
     @Test
-    void FAILED_상태의_job은_attemptNo가_증가하고_outbox가_재발행된다() {
+    void FAILED_상태의_job은_attemptNo가_증가하고_다시_대기한다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
         jobRepository.transitionIfStatusAndAttemptMatch(
                 job.getId(), JobStatus.FAILED, JobStatus.HOLDING, 0, Instant.now());
@@ -42,7 +38,6 @@ class RetryServiceTest {
         Job found = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(found.getStatus()).isEqualTo(JobStatus.HOLDING);
         assertThat(found.getAttemptNo()).isEqualTo(1);
-        assertThat(outboxRepository.findBySentFalseOrderByIdAsc()).hasSize(1);
     }
 
     @Test
@@ -53,6 +48,5 @@ class RetryServiceTest {
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(found.getAttemptNo()).isZero();
-        assertThat(outboxRepository.findBySentFalseOrderByIdAsc()).isEmpty();
     }
 }

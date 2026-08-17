@@ -8,13 +8,6 @@ spring:
     hibernate:
       ddl-auto: create-drop
     open-in-view: false
-  kafka:
-    bootstrap-servers: localhost:9092
-    admin:
-      fail-fast: false
-    properties:
-      default.api.timeout.ms: 3000
-      request.timeout.ms: 3000
 
 app:
   scheduling:
@@ -23,9 +16,6 @@ app:
     enabled: false
   seed:
     enabled: false
-  kafka:
-    topic: generation-jobs
-    partitions: 1
   generation:
     cost: 100
     max-attempts: 3
@@ -36,7 +26,5 @@ app:
   heartbeat:
     timeout-seconds: 10
     refresh-interval-seconds: 5
-  holding:
-    timeout-seconds: 60
   processing:
     timeout-seconds: 60

@@ -10,7 +10,6 @@ import com.example.credit_system.organization.repository.OrganizationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -27,13 +26,11 @@ import static org.awaitility.Awaitility.await;
 
 @Testcontainers
 @ActiveProfiles("test")
-@EmbeddedKafka(partitions = 1, topics = "generation-jobs")
 @SpringBootTest(properties = {
-        "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
         "app.scheduling.enabled=true",
         "app.worker.enabled=true",
         "app.stub.failure-rate=1.0",
-        "app.scheduling.outbox-relay-interval-millis=200",
+        "app.scheduling.worker-interval-millis=100",
         "app.scheduling.dead-job-scan-interval-millis=500"
 })
 class RetryRefundTest {

@@ -7,8 +7,6 @@ public record AppProperties(
         Generation generation,
         Stub stub,
         Heartbeat heartbeat,
-        Kafka kafka,
-        Holding holding,
         Processing processing
 ) {
 
@@ -19,12 +17,6 @@ public record AppProperties(
     }
 
     public record Heartbeat(long timeoutSeconds, long refreshIntervalSeconds) {
-    }
-
-    public record Kafka(String topic, int partitions) {
-    }
-
-    public record Holding(long timeoutSeconds) {
     }
 
     public record Processing(long timeoutSeconds) {

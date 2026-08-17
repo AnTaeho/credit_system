@@ -6,7 +6,6 @@ import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.job.service.RefundService;
 import com.example.credit_system.job.service.RetryService;
-import com.example.credit_system.outbox.repository.OutboxRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,7 +22,6 @@ public class DeadJobSchedulerTask {
 
     private final HeartbeatRegistry heartbeatRegistry;
     private final JobRepository jobRepository;
-    private final OutboxRepository outboxRepository;
     private final RetryService retryService;
     private final RefundService refundService;
     private final AppProperties appProperties;
@@ -34,25 +32,9 @@ public class DeadJobSchedulerTask {
         for (Long jobId : heartbeatRegistry.findExpiredJobIds()) {
             markExpiredAsFailed(jobId);
         }
-        reapStaleHolding();
         reapStaleProcessing();
         for (Job job : jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)) {
             process(job);
-        }
-    }
-
-    /** 오래 정체된 HOLDING 작업을 실패 상태로 회수한다. */
-    private void reapStaleHolding() {
-        Instant cutoff = Instant.now().minusSeconds(appProperties.holding().timeoutSeconds());
-        for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.HOLDING, cutoff)) {
-            if (outboxRepository.existsByJobIdAndSentFalse(job.getId())) {
-                continue;
-            }
-            int updated = jobRepository.transitionIfStatusAndAttemptMatch(
-                    job.getId(), JobStatus.FAILED, JobStatus.HOLDING, job.getAttemptNo(), Instant.now());
-            if (updated == 1) {
-                log.info("HOLDING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
-            }
         }
     }
 

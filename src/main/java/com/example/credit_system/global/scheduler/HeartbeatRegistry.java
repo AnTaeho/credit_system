@@ -26,7 +26,7 @@ public class HeartbeatRegistry {
     public HeartbeatRegistry(StringRedisTemplate redisTemplate, AppProperties appProperties) {
         this.redisTemplate = redisTemplate;
         this.appProperties = appProperties;
-        this.executor = Executors.newScheduledThreadPool(appProperties.kafka().partitions());
+        this.executor = Executors.newScheduledThreadPool(1);
     }
 
     /** 작업 heartbeat의 주기적 갱신을 시작한다. */
