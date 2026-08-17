@@ -28,14 +28,15 @@ class GenerationWorkerUnitTest {
 
     @BeforeEach
     void setUp() {
-        worker = new GenerationWorker(jobRepository, jobProcessor);
+        worker = new GenerationWorker(jobRepository, jobProcessor, 20);
         job = Job.hold(10L, 100L, "cat");
         ReflectionTestUtils.setField(job, "id", 1L);
     }
 
     @Test
     void 대기_작업을_DB에서_찾아_선점한_뒤_처리기로_넘긴다() {
-        when(jobRepository.findByStatusOrderByIdAsc(any())).thenReturn(List.of(job));
+        when(jobRepository.findByStatusOrderByIdAsc(eq(com.example.credit_system.job.domain.JobStatus.HOLDING), any()))
+                .thenReturn(List.of(job));
         when(jobRepository.startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class))).thenReturn(1);
 
         worker.processPendingJobs();

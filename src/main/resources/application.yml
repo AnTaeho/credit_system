@@ -22,6 +22,7 @@ app:
     enabled: true
   worker:
     enabled: true
+    batch-size: 20
   seed:
     enabled: true
   generation:

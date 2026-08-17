@@ -5,6 +5,7 @@ import com.example.credit_system.job.domain.JobStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +77,9 @@ public interface JobRepository extends JpaRepository<Job, Long> {
 
     /** 상태별 작업을 ID 오름차순으로 조회한다. */
     List<Job> findByStatusOrderByIdAsc(JobStatus status);
+
+    /** 워커가 한 주기에 처리할 만큼만 대기 작업을 ID 순으로 조회한다. */
+    List<Job> findByStatusOrderByIdAsc(JobStatus status, Pageable pageable);
 
     /** 조직별 작업을 최신순으로 조회한다. */
     List<Job> findByOrganizationIdOrderByIdDesc(Long organizationId);

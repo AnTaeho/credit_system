@@ -14,6 +14,7 @@ app:
     enabled: false
   worker:
     enabled: false
+    batch-size: 20
   seed:
     enabled: false
   generation:

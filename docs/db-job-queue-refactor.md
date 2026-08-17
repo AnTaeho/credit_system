@@ -5,7 +5,7 @@
 ## 처리 흐름
 
 1. 생성 요청 트랜잭션에서 크레딧 `HOLD`, job(`HOLDING`), ledger를 함께 저장한다.
-2. `GenerationWorker`가 일정 주기마다 `HOLDING` job을 조회하고 조건부 UPDATE로 `PROCESSING` 상태를 선점한다.
+2. `GenerationWorker`가 일정 주기마다 `HOLDING` job을 최대 `app.worker.batch-size`건(기본 20건) 조회하고 조건부 UPDATE로 `PROCESSING` 상태를 선점한다.
 3. 선점한 워커만 Redis heartbeat를 등록한 뒤 외부 생성 작업을 호출한다.
 4. 성공하면 `COMPLETED`, 예상된 생성 실패나 예외는 `FAILED`로 기록한다.
 5. `DeadJobSchedulerTask`는 heartbeat가 없어진 오래된 `PROCESSING` job을 `FAILED`로 회수한다.
