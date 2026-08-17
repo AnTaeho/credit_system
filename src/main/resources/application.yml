@@ -16,6 +16,10 @@ spring:
     redis:
       host: localhost
       port: 6379
+  task:
+    scheduling:
+      pool:
+        size: 2
 
 app:
   scheduling:
@@ -23,6 +27,7 @@ app:
   worker:
     enabled: true
     batch-size: 20
+    concurrency: 3
   seed:
     enabled: true
   generation:
