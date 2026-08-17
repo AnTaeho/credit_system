@@ -89,9 +89,10 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 
 ## 5. 데이터 모델
 
-4개 테이블로 구성된다.
+5개 테이블로 구성된다.
 
 - **organization**: `id`, `balance`, `updated_at` — 잔액을 이 컬럼으로 직접 관리
+- **users**: `id`, `org_id`, `username`, `password`, `created_at` — 조직에 속한 사용자
 - **job**: `id`, `org_id`, `status`(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED), `attempt_no`(fencing
   토큰), `hold_amount`, `updated_at`(heartbeat 용도로도 사용) — 작업 큐를 겸하므로 워커의 배치 폴링
   (status 필터 + id 정렬)을 위해 `idx_jobs_status_id(status, id)` 인덱스를 둔다
