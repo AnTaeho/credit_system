@@ -45,5 +45,23 @@ dependencies {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		excludeTags 'benchmark'
+	}
+}
+
+tasks.register('benchmark', Test) {
+	useJUnitPlatform {
+		includeTags 'benchmark'
+	}
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	outputs.upToDateWhen { false }
+	System.properties.findAll { key, value -> key.toString().startsWith('bench.') }.each { key, value ->
+		systemProperty key, value
+	}
+	testLogging {
+		showStandardStreams = true
+		events "passed", "failed"
+	}
 }
