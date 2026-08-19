@@ -5,6 +5,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import org.springframework.test.context.DynamicPropertyRegistry;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
@@ -14,15 +15,29 @@ abstract class SharedContainers {
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
             .withDatabaseName("credit_system")
             .withUsername("credit")
-            .withPassword("credit");
+            .withPassword("credit")
+            .withReuse(true);
 
     static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-                    .withExposedPorts(6379);
+                    .withExposedPorts(6379)
+                    .withReuse(true);
 
     static {
         MYSQL.start();
         REDIS.start();
+        flushRedis();
+    }
+
+    private static void flushRedis() {
+        try {
+            REDIS.execInContainer("redis-cli", "FLUSHALL");
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to flush redis", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Failed to flush redis", e);
+        }
     }
 
     static void registerDatabase(DynamicPropertyRegistry registry, String database) {

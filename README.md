@@ -28,6 +28,12 @@ API는 HTTP 헤더 `X-Organization-Id`로 조직을 식별한다. 웹 UI와 인�
 Spring Boot 4.1 (Java 17) / Spring Data JPA / Spring Data Redis / MySQL /
 H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 
+동시성·E2E 테스트가 쓰는 MySQL·Redis 컨테이너는 `SharedContainers`가 한 번만 띄워 네 클래스가 공유하고,
+클래스마다 별도 데이터베이스를 받아 서로를 오염시키지 않는다. 컨테이너는 JUnit 생명주기에 묶여 있지 않아
+스프링 컨텍스트가 닫힐 때까지 살아 있다. 실행 간 재사용도 가능한데, `~/.testcontainers.properties`에
+`testcontainers.reuse.enable=true`를 넣으면 켜진다(전체 실행 약 19초 → 14초). 켜지 않아도 매 실행
+새로 기동할 뿐 테스트는 동일하게 통과한다. 재사용 중인 컨테이너는 Ryuk이 회수하지 않으므로 직접 지워야 한다.
+
 ## 3. 아키텍처와 처리 흐름
 
 ```
