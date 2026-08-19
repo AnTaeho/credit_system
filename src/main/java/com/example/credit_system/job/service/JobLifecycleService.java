@@ -17,11 +17,45 @@ import java.time.Instant;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class RefundService {
+public class JobLifecycleService {
 
     private final JobRepository jobRepository;
     private final OrganizationRepository organizationRepository;
     private final LedgerRepository ledgerRepository;
+
+    @Transactional
+    public void confirm(Long jobId, int attemptNo, String resultUrl) {
+        int updated = jobRepository.completeIfAttemptMatches(jobId, resultUrl, attemptNo, Instant.now());
+        if (updated == 0) {
+            log.info("이미 무효화된 시도, confirm 무시: jobId={}, attemptNo={}", jobId, attemptNo);
+            return;
+        }
+        Job job = jobRepository.findById(jobId).orElseThrow();
+        ledgerRepository.save(LedgerEntry.of(job.getOrganizationId(), jobId, LedgerType.CONFIRM, 0));
+        log.info("confirm 완료: jobId={}, attemptNo={}", jobId, attemptNo);
+    }
+
+    @Transactional
+    public void markFailed(Long jobId, int attemptNo) {
+        int updated = jobRepository.transitionIfStatusAndAttemptMatch(
+                jobId, JobStatus.FAILED, JobStatus.PROCESSING, attemptNo, Instant.now());
+        if (updated == 0) {
+            log.info("이미 무효화된 시도, 실패 처리 무시: jobId={}, attemptNo={}", jobId, attemptNo);
+            return;
+        }
+        log.info("실패 처리: jobId={}, attemptNo={}", jobId, attemptNo);
+    }
+
+    @Transactional
+    public void retry(Job job) {
+        int updated = jobRepository.incrementAttemptForRetry(job.getId(), job.getAttemptNo(), Instant.now());
+        if (updated == 0) {
+            log.info("재시도 투입 경쟁에서 밀림 또는 이미 처리됨: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
+            return;
+        }
+        int newAttemptNo = job.getAttemptNo() + 1;
+        log.info("재시도 투입: jobId={}, newAttemptNo={}", job.getId(), newAttemptNo);
+    }
 
     @Transactional
     public void finalRefund(Job job) {

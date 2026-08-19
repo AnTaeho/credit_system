@@ -2,8 +2,7 @@ package com.example.credit_system.job.worker;
 
 import com.example.credit_system.scheduler.HeartbeatRegistry;
 import com.example.credit_system.job.domain.Job;
-import com.example.credit_system.job.service.ConfirmService;
-import com.example.credit_system.job.service.FailureService;
+import com.example.credit_system.job.service.JobLifecycleService;
 import com.example.credit_system.job.stub.GenerationStubClient;
 import com.example.credit_system.global.exception.StubGenerationException;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +21,7 @@ public class GenerationJobProcessor {
 
     private final HeartbeatRegistry heartbeatRegistry;
     private final GenerationStubClient stubClient;
-    private final ConfirmService confirmService;
-    private final FailureService failureService;
+    private final JobLifecycleService jobLifecycleService;
 
     public void process(Job job) {
         ScheduledFuture<?> heartbeatFuture = heartbeatRegistry.startHeartbeat(job.getId());
@@ -32,7 +30,7 @@ public class GenerationJobProcessor {
             try {
                 resultUrl = stubClient.generate(job.getPrompt());
             } catch (StubGenerationException e) {
-                failureService.markFailed(job.getId(), job.getAttemptNo());
+                jobLifecycleService.markFailed(job.getId(), job.getAttemptNo());
                 return;
             }
 
@@ -51,7 +49,7 @@ public class GenerationJobProcessor {
         RuntimeException lastFailure = null;
         for (int attempt = 1; attempt <= CONFIRM_MAX_ATTEMPTS; attempt++) {
             try {
-                confirmService.confirm(job.getId(), job.getAttemptNo(), resultUrl);
+                jobLifecycleService.confirm(job.getId(), job.getAttemptNo(), resultUrl);
                 return;
             } catch (RuntimeException e) {
                 lastFailure = e;

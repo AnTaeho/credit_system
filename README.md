@@ -46,8 +46,8 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
                                     [GenerationJobProcessor] (워커 스레드)
                                               │  Redis heartbeat 등록(ZADD) + 주기 갱신
                                               │  GenerationStubClient.generate() 호출
-                                              ├─ 성공 → ConfirmService (job COMPLETED, ledger CONFIRM)
-                                              ├─ 생성 실패 → FailureService (job FAILED)
+                                              ├─ 성공 → JobLifecycleService.confirm (job COMPLETED, ledger CONFIRM)
+                                              ├─ 생성 실패 → JobLifecycleService.markFailed (job FAILED)
                                               └─ 결과 반영 실패 → 3회 재시도 후 PROCESSING 유지(회수 경로에 위임)
                                               ▼
                                     [DeadJobSchedulerTask] (스케줄러, 기본 5초 주기)
@@ -55,8 +55,8 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
                                               │  reapStaleProcessing: heartbeat 없는 PROCESSING → FAILED 회수
                                               ▼
                                      FAILED job 재검토
-                                       ├─ attempt_no + 1 < 3 → RetryService: attempt_no+1 후 HOLDING으로 큐 재투입
-                                       └─ attempt_no 소진 → RefundService.finalRefund
+                                       ├─ attempt_no + 1 < 3 → JobLifecycleService.retry: attempt_no+1 후 HOLDING으로 큐 재투입
+                                       └─ attempt_no 소진 → JobLifecycleService.finalRefund
                                                               (job REFUNDED, balance 환불, ledger REFUND)
 ```
 
@@ -138,10 +138,7 @@ com.example.credit_system
 │   ├── repository/JobRepository.java, IdempotencyKeyRepository.java
 │   ├── service/
 │   │   ├── HoldService.java                    # 요청 접수(hold) 트랜잭션
-│   │   ├── ConfirmService.java                 # 성공 확정
-│   │   ├── FailureService.java                 # 실패 전이
-│   │   ├── RetryService.java                   # attempt_no 증가 후 HOLDING 재투입
-│   │   └── RefundService.java                  # 최종 환불(finalRefund)
+│   │   └── JobLifecycleService.java            # confirm/markFailed/retry/finalRefund - 성공 확정·실패 전이·재시도·최종 환불
 │   ├── stub/GenerationStubClient.java
 │   └── worker/
 │       ├── GenerationWorker.java               # DB 큐 폴링 + 조건부 UPDATE 선점

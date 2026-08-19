@@ -4,8 +4,7 @@ import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
-import com.example.credit_system.job.service.RefundService;
-import com.example.credit_system.job.service.RetryService;
+import com.example.credit_system.job.service.JobLifecycleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,10 +34,7 @@ class DeadJobSchedulerTaskTest {
     JobRepository jobRepository;
 
     @Mock
-    RetryService retryService;
-
-    @Mock
-    RefundService refundService;
+    JobLifecycleService jobLifecycleService;
 
     DeadJobSchedulerTask task;
 
@@ -46,7 +42,7 @@ class DeadJobSchedulerTaskTest {
     void setUp() {
         AppProperties appProperties = new AppProperties(
                 new AppProperties.Generation(100L, 3), null, null, new AppProperties.Processing(60));
-        task = new DeadJobSchedulerTask(heartbeatRegistry, jobRepository, retryService, refundService, appProperties);
+        task = new DeadJobSchedulerTask(heartbeatRegistry, jobRepository, jobLifecycleService, appProperties);
         when(heartbeatRegistry.findExpiredJobIds()).thenReturn(Set.of());
         when(jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)).thenReturn(List.of());
     }
@@ -128,8 +124,8 @@ class DeadJobSchedulerTaskTest {
 
         task.scan();
 
-        verify(retryService).retry(current);
-        verify(refundService, never()).finalRefund(any(Job.class));
+        verify(jobLifecycleService).retry(current);
+        verify(jobLifecycleService, never()).finalRefund(any(Job.class));
     }
 
     @Test
@@ -141,8 +137,8 @@ class DeadJobSchedulerTaskTest {
 
         task.scan();
 
-        verify(refundService).finalRefund(current);
-        verify(retryService, never()).retry(any(Job.class));
+        verify(jobLifecycleService).finalRefund(current);
+        verify(jobLifecycleService, never()).retry(any(Job.class));
     }
 
     @Test
@@ -155,7 +151,7 @@ class DeadJobSchedulerTaskTest {
 
         task.scan();
 
-        verify(retryService, never()).retry(any(Job.class));
-        verify(refundService, never()).finalRefund(any(Job.class));
+        verify(jobLifecycleService, never()).retry(any(Job.class));
+        verify(jobLifecycleService, never()).finalRefund(any(Job.class));
     }
 }

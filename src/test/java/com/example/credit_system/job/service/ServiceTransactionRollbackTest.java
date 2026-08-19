@@ -25,7 +25,7 @@ class ServiceTransactionRollbackTest {
 
     @Autowired
     HoldService holdService;
-    @Autowired RefundService refundService;
+    @Autowired JobLifecycleService jobLifecycleService;
     @Autowired IdempotencyKeyRepository idempotencyKeyRepository;
     @Autowired JobRepository jobRepository;
     @Autowired LedgerRepository ledgerRepository;
@@ -64,7 +64,7 @@ class ServiceTransactionRollbackTest {
         Job failed = jobRepository.findById(job.getId()).orElseThrow();
         organizationRepository.deleteById(organization.getId());
 
-        assertThatThrownBy(() -> refundService.finalRefund(failed))
+        assertThatThrownBy(() -> jobLifecycleService.finalRefund(failed))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("환불 잔액 반영 실패");
 

@@ -4,8 +4,7 @@ import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
-import com.example.credit_system.job.service.RefundService;
-import com.example.credit_system.job.service.RetryService;
+import com.example.credit_system.job.service.JobLifecycleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,8 +21,7 @@ public class DeadJobSchedulerTask {
 
     private final HeartbeatRegistry heartbeatRegistry;
     private final JobRepository jobRepository;
-    private final RetryService retryService;
-    private final RefundService refundService;
+    private final JobLifecycleService jobLifecycleService;
     private final AppProperties appProperties;
 
     @Scheduled(fixedDelayString = "${app.scheduling.dead-job-scan-interval-millis:5000}")
@@ -69,9 +67,9 @@ public class DeadJobSchedulerTask {
             return;
         }
         if (current.getAttemptNo() + 1 < appProperties.generation().maxAttempts()) {
-            retryService.retry(current);
+            jobLifecycleService.retry(current);
         } else {
-            refundService.finalRefund(current);
+            jobLifecycleService.finalRefund(current);
         }
     }
 }

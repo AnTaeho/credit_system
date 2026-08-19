@@ -589,7 +589,7 @@
           <li>이미 ③에서 PROCESSING으로 선점된 job만 넘어온다. 폴링·선점과 오래 걸리는 외부 호출의 lifecycle을 분리한 클래스</li>
           <li><code>heartbeatRegistry.startHeartbeat(jobId)</code> — Redis sorted set에 ZADD, <code>app.heartbeat.refresh-interval-seconds</code>(5초) 주기 갱신 시작</li>
           <li><code>stubClient.generate(prompt)</code> — 지연 3~7초 + 실패율 30% (<code>app.stub.*</code>)</li>
-          <li>성공 → <code>ConfirmService.confirm(jobId, attemptNo, resultUrl)</code> / <code>StubGenerationException</code> → <code>FailureService.markFailed(jobId, attemptNo)</code></li>
+          <li>성공 → <code>JobLifecycleService.confirm(jobId, attemptNo, resultUrl)</code> / <code>StubGenerationException</code> → <code>JobLifecycleService.markFailed(jobId, attemptNo)</code></li>
           <li>생성은 됐는데 <strong>결과 반영(confirm)이 실패</strong>하면 200ms 간격으로 최대 3회 재시도. 그래도 실패하면 FAILED로 바꾸지 않고 PROCESSING에 남겨, ⑦의 timeout 회수 경로 한 곳으로 다음 시도를 몰아준다</li>
           <li><code>finally</code> → <code>heartbeatRegistry.stopHeartbeat</code> (가장 바깥에서만 제거해 재시도 중에도 heartbeat가 살아 있게 한다)</li>
         </ul>
@@ -609,8 +609,8 @@
             <span class="step-title">⑥-A 성공 경로</span>
             <span class="step-badge">SUCCESS</span>
           </div>
-          <div class="classname">ConfirmService.confirm</div>
-          <div class="filepath">job/service/ConfirmService.java · @Transactional</div>
+          <div class="classname">JobLifecycleService.confirm</div>
+          <div class="filepath">job/service/JobLifecycleService.java · @Transactional</div>
           <div class="step-desc">
             <ul>
               <li><code>completeIfAttemptMatches(jobId, resultUrl, attemptNo, now)</code> — 0행이면 무효화된 시도로 보고 무시</li>
@@ -626,8 +626,8 @@
             <span class="step-title">⑥-B 실패 경로</span>
             <span class="step-badge">FAIL</span>
           </div>
-          <div class="classname">FailureService.markFailed</div>
-          <div class="filepath">job/service/FailureService.java · @Transactional</div>
+          <div class="classname">JobLifecycleService.markFailed</div>
+          <div class="filepath">job/service/JobLifecycleService.java · @Transactional</div>
           <div class="step-desc">
             <ul>
               <li><code>transitionIfStatusAndAttemptMatch(jobId, FAILED, PROCESSING, attemptNo, now)</code> — 0행이면 무시</li>
@@ -654,7 +654,7 @@
         <ul>
           <li><strong>1.</strong> <code>heartbeatRegistry.findExpiredJobIds()</code> → <code>markExpiredAsFailed</code>: heartbeat 만료된 PROCESSING job을 FAILED로 전이 (워커 크래시 회수)</li>
           <li><strong>2.</strong> <code>reapStaleProcessing()</code>: <code>app.processing.timeout-seconds</code>(60초) 넘은 PROCESSING job 중 <strong>살아있는 heartbeat가 없는 것만</strong> FAILED로 회수 (Redis 장애 / 선점 직후 위임·롤백 실패 / heartbeat 등록 전 크래시 / ⑤의 confirm 재시도 소진을 모두 커버)</li>
-          <li><strong>3.</strong> 모든 FAILED job에 대해 <code>process(job)</code>: 다시 findById 해서 여전히 FAILED인지 재확인(아니면 skip) → <code>attempt_no + 1 &lt; app.generation.max-attempts(3)</code> 이면 <code>RetryService.retry</code>, 아니면 <code>RefundService.finalRefund</code></li>
+          <li><strong>3.</strong> 모든 FAILED job에 대해 <code>process(job)</code>: 다시 findById 해서 여전히 FAILED인지 재확인(아니면 skip) → <code>attempt_no + 1 &lt; app.generation.max-attempts(3)</code> 이면 <code>JobLifecycleService.retry</code>, 아니면 <code>JobLifecycleService.finalRefund</code></li>
           <li>HOLDING은 <strong>회수 대상이 아니다.</strong> 발행 실패 상태가 아니라 정상적인 큐 대기 상태이므로 경과 시간만으로 실패 처리하지 않고, 워커가 멈춰 있던 동안 쌓인 job은 재기동 후 ③에서 그대로 처리된다</li>
         </ul>
       </div>
@@ -670,11 +670,11 @@
       <div class="branch-col">
         <div class="step" data-path="fail">
           <div class="step-head">
-            <span class="step-title">⑧-A RetryService.retry</span>
+            <span class="step-title">⑧-A JobLifecycleService.retry</span>
             <span class="step-badge">RETRY</span>
           </div>
-          <div class="classname">RetryService.retry</div>
-          <div class="filepath">job/service/RetryService.java · @Transactional</div>
+          <div class="classname">JobLifecycleService.retry</div>
+          <div class="filepath">job/service/JobLifecycleService.java · @Transactional</div>
           <div class="step-desc">
             <ul>
               <li><code>incrementAttemptForRetry(jobId, attemptNo, now)</code>: <code>UPDATE job SET attempt_no=attempt_no+1, status='HOLDING' WHERE id=? AND status='FAILED' AND attempt_no=?</code> — 0행이면 다른 스케줄러 인스턴스와의 경쟁에서 밀린 것이므로 그냥 종료</li>
@@ -686,11 +686,11 @@
       <div class="branch-col">
         <div class="step" data-path="refund">
           <div class="step-head">
-            <span class="step-title">⑧-B RefundService.finalRefund</span>
+            <span class="step-title">⑧-B JobLifecycleService.finalRefund</span>
             <span class="step-badge">FINAL</span>
           </div>
-          <div class="classname">RefundService.finalRefund</div>
-          <div class="filepath">job/service/RefundService.java · @Transactional</div>
+          <div class="classname">JobLifecycleService.finalRefund</div>
+          <div class="filepath">job/service/JobLifecycleService.java · @Transactional</div>
           <div class="step-desc">
             <ul>
               <li><code>transitionIfStatusAndAttemptMatch(jobId, REFUNDED, FAILED, attemptNo, now)</code>: 0행이면 <strong>늦게 도착한 워커가 이미 COMPLETED로 바꿔놓은 것</strong>이므로 환불을 취소하고 종료 (이중 환불 방지)</li>
@@ -883,14 +883,14 @@ WHERE id = ? AND status = 'FAILED' AND attempt_no = ?</pre></td>
       </div>
     </div>
     <div class="tl-row">
-      <div class="tl-step-label">⑥-A ConfirmService</div>
+      <div class="tl-step-label">⑥-A JobLifecycleService.confirm</div>
       <div class="tl-tables">
         <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → COMPLETED</span>
         <span class="tl-chip"><span class="op op-insert">INSERT</span>ledger (CONFIRM, 0)</span>
       </div>
     </div>
     <div class="tl-row">
-      <div class="tl-step-label">⑥-B FailureService</div>
+      <div class="tl-step-label">⑥-B JobLifecycleService.markFailed</div>
       <div class="tl-tables">
         <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → FAILED</span>
       </div>
@@ -902,14 +902,14 @@ WHERE id = ? AND status = 'FAILED' AND attempt_no = ?</pre></td>
       </div>
     </div>
     <div class="tl-row">
-      <div class="tl-step-label">⑧-A RetryService</div>
+      <div class="tl-step-label">⑧-A JobLifecycleService.retry</div>
       <div class="tl-tables">
         <span class="tl-chip"><span class="op op-update">UPDATE</span>job.attempt_no += 1</span>
         <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → HOLDING (재투입)</span>
       </div>
     </div>
     <div class="tl-row">
-      <div class="tl-step-label">⑧-B RefundService</div>
+      <div class="tl-step-label">⑧-B JobLifecycleService.finalRefund</div>
       <div class="tl-tables">
         <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → REFUNDED</span>
         <span class="tl-chip"><span class="op op-update">UPDATE</span>organization.balance += 100</span>

@@ -2,8 +2,7 @@ package com.example.credit_system.job.worker;
 
 import com.example.credit_system.scheduler.HeartbeatRegistry;
 import com.example.credit_system.job.domain.Job;
-import com.example.credit_system.job.service.ConfirmService;
-import com.example.credit_system.job.service.FailureService;
+import com.example.credit_system.job.service.JobLifecycleService;
 import com.example.credit_system.job.stub.GenerationStubClient;
 import com.example.credit_system.global.exception.StubGenerationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,8 +26,7 @@ class GenerationJobProcessorTest {
 
     @Mock HeartbeatRegistry heartbeatRegistry;
     @Mock GenerationStubClient stubClient;
-    @Mock ConfirmService confirmService;
-    @Mock FailureService failureService;
+    @Mock JobLifecycleService jobLifecycleService;
     @Mock ScheduledFuture<?> heartbeatFuture;
 
     GenerationJobProcessor processor;
@@ -36,7 +34,7 @@ class GenerationJobProcessorTest {
 
     @BeforeEach
     void setUp() {
-        processor = new GenerationJobProcessor(heartbeatRegistry, stubClient, confirmService, failureService);
+        processor = new GenerationJobProcessor(heartbeatRegistry, stubClient, jobLifecycleService);
         job = Job.hold(10L, 100L, "cat");
         ReflectionTestUtils.setField(job, "id", 1L);
         doReturn(heartbeatFuture).when(heartbeatRegistry).startHeartbeat(1L);
@@ -48,7 +46,7 @@ class GenerationJobProcessorTest {
 
         processor.process(job);
 
-        verify(confirmService).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 
@@ -58,8 +56,8 @@ class GenerationJobProcessorTest {
 
         processor.process(job);
 
-        verify(failureService).markFailed(1L, 0);
-        verify(confirmService, never()).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService).markFailed(1L, 0);
+        verify(jobLifecycleService, never()).confirm(1L, 0, "https://example.test/cat.png");
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 
@@ -68,12 +66,12 @@ class GenerationJobProcessorTest {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");
         doThrow(new IllegalStateException("database unavailable"))
                 .doNothing()
-                .when(confirmService).confirm(1L, 0, "https://example.test/cat.png");
+                .when(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
 
         processor.process(job);
 
-        verify(confirmService, times(2)).confirm(1L, 0, "https://example.test/cat.png");
-        verify(failureService, never()).markFailed(1L, 0);
+        verify(jobLifecycleService, times(2)).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService, never()).markFailed(1L, 0);
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 
@@ -81,12 +79,12 @@ class GenerationJobProcessorTest {
     void 결과_반영_재시도를_모두_소진하면_FAILED로_바꾸지_않고_PROCESSING을_유지한다() {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");
         doThrow(new IllegalStateException("database unavailable"))
-                .when(confirmService).confirm(1L, 0, "https://example.test/cat.png");
+                .when(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
 
         processor.process(job);
 
-        verify(confirmService, times(3)).confirm(1L, 0, "https://example.test/cat.png");
-        verify(failureService, never()).markFailed(1L, 0);
+        verify(jobLifecycleService, times(3)).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService, never()).markFailed(1L, 0);
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 }
