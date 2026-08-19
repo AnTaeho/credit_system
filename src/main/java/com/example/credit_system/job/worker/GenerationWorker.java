@@ -39,12 +39,7 @@ public class GenerationWorker {
     public void processPendingJobs() {
         List<Job> jobs = jobRepository.findByStatusOrderByIdAsc(JobStatus.HOLDING, PageRequest.of(0, batchSize));
         for (Job job : jobs) {
-            try {
-                if (!claim(job)) {
-                    continue;
-                }
-            } catch (RuntimeException e) {
-                log.warn("생성 작업 선점 실패: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
+            if (!claim(job)) {
                 continue;
             }
             if (!dispatch(job)) {
@@ -53,17 +48,22 @@ public class GenerationWorker {
         }
     }
 
-    boolean claim(Job job) {
-        int updated = jobRepository.startProcessingIfAttemptMatches(
-                job.getId(), job.getAttemptNo(), Instant.now());
-        if (updated == 0) {
-            log.info("다른 워커가 선점했거나 무효한 작업 무시: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
+    private boolean claim(Job job) {
+        try {
+            int updated = jobRepository.startProcessingIfAttemptMatches(
+                    job.getId(), job.getAttemptNo(), Instant.now());
+            if (updated == 0) {
+                log.info("다른 워커가 선점했거나 무효한 작업 무시: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
+                return false;
+            }
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("생성 작업 선점 실패: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
             return false;
         }
-        return true;
     }
 
-    boolean dispatch(Job job) {
+    private boolean dispatch(Job job) {
         try {
             workerExecutor.execute(() -> jobProcessor.process(job));
             return true;
