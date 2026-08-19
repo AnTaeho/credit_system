@@ -49,7 +49,14 @@ public class DeadJobSchedulerTask {
     private void markExpiredJobsAsFailed() {
         for (Long jobId : heartbeatRegistry.findExpiredJobIds()) {
             try {
-                markExpiredAsFailed(jobId);
+                jobRepository.findById(jobId).ifPresent(job -> {
+                    int updated = jobRepository.transitionIfStatusAndAttemptMatch(
+                            jobId, JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
+                    if (updated == 1) {
+                        log.info("heartbeat 만료로 FAILED 전이: jobId={}, attemptNo={}", jobId, job.getAttemptNo());
+                    }
+                });
+                heartbeatRegistry.remove(jobId);
             } catch (RuntimeException e) {
                 log.warn("heartbeat 만료 job 회수 실패: jobId={}", jobId, e);
             }
@@ -61,51 +68,32 @@ public class DeadJobSchedulerTask {
         for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
                 JobStatus.PROCESSING, cutoff, PageRequest.of(0, SCAN_BATCH_SIZE))) {
             try {
-                reapIfNoHeartbeat(job);
+                if (heartbeatRegistry.hasLiveHeartbeat(job.getId())) {
+                    continue;
+                }
+                int updated = jobRepository.transitionIfStatusAndAttemptMatch(
+                        job.getId(), JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
+                if (updated == 1) {
+                    heartbeatRegistry.remove(job.getId());
+                    log.info("PROCESSING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
+                }
             } catch (RuntimeException e) {
                 log.warn("PROCESSING 정체 job 회수 실패: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
             }
         }
     }
 
-    private void reapIfNoHeartbeat(Job job) {
-        if (heartbeatRegistry.hasLiveHeartbeat(job.getId())) {
-            return;
-        }
-        int updated = jobRepository.transitionIfStatusAndAttemptMatch(
-                job.getId(), JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
-        if (updated == 1) {
-            heartbeatRegistry.remove(job.getId());
-            log.info("PROCESSING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
-        }
-    }
-
     private void processFailedJobs() {
         for (Job job : jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED, PageRequest.of(0, SCAN_BATCH_SIZE))) {
             try {
-                process(job);
+                if (job.getAttemptNo() + 1 < appProperties.generation().maxAttempts()) {
+                    jobLifecycleService.retry(job);
+                } else {
+                    jobLifecycleService.finalRefund(job);
+                }
             } catch (RuntimeException e) {
                 log.warn("FAILED job 재검토 실패: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
             }
-        }
-    }
-
-    private void markExpiredAsFailed(Long jobId) {
-        jobRepository.findById(jobId).ifPresentOrElse(job -> {
-            int updated = jobRepository.transitionIfStatusAndAttemptMatch(
-                    jobId, JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
-            if (updated == 1) {
-                log.info("heartbeat 만료로 FAILED 전이: jobId={}, attemptNo={}", jobId, job.getAttemptNo());
-            }
-            heartbeatRegistry.remove(jobId);
-        }, () -> heartbeatRegistry.remove(jobId));
-    }
-
-    private void process(Job job) {
-        if (job.getAttemptNo() + 1 < appProperties.generation().maxAttempts()) {
-            jobLifecycleService.retry(job);
-        } else {
-            jobLifecycleService.finalRefund(job);
         }
     }
 }

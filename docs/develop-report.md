@@ -44,7 +44,7 @@ id 순서상 뒤에 있던 job은 그 주기에 처리되지 않았다.
 
 **적용한 것**: `scan()`을 세 단계 메서드로 나눠 단계마다 try/catch로 감싸고(한 단계가 통째로 실패해도
 나머지 단계는 돈다), 각 단계 안에서 다시 항목마다 try/catch + 다음 항목으로 진행하게 했다.
-`reapStaleProcessing`의 루프 본문은 `reapIfNoHeartbeat(Job)`으로 추출했고 로직·로그는 그대로다.
+항목 로직은 각 단계의 루프 본문에 두고 로직·로그는 바꾸지 않았다.
 회귀 테스트 3건을 추가했다(환불 실패 격리 / heartbeat 만료 회수 실패 격리 / 단계 실패 격리).
 전체 테스트 100건 → 103건.
 
@@ -58,10 +58,10 @@ id 순서상 뒤에 있던 job은 그 주기에 처리되지 않았다.
 배치 크기는 설정이 아니라 `SCAN_BATCH_SIZE` 클래스 상수다 — 배포마다 조절할 튜닝 노브가 아니라
 방어적 상한이라고 판단했다.
 
-`process()`의 `findById` 재조회를 없애고 스냅샷으로 바로 판단하게 했다. 재조회는 이 프로젝트가 쓰지
+`processFailedJobs()`의 `findById` 재조회를 없애고 스냅샷으로 바로 판단하게 했다. 재조회는 이 프로젝트가 쓰지
 않겠다고 선언한 check-then-act였고, `retry`/`finalRefund`가 `(id, status=FAILED, attemptNo)` 조건부
 UPDATE로 fencing하므로 낡은 스냅샷은 0행으로 무시되고 다음 주기에 자기 교정된다. attemptNo는 재시도마다
-증가하고 REFUNDED는 종결이라 ABA 문제도 없다. `markExpiredAsFailed`의 `findById`는 남겼다 — 거기선
+증가하고 REFUNDED는 종결이라 ABA 문제도 없다. `markExpiredJobsAsFailed`의 `findById`는 남겼다 — 거기선
 heartbeat에서 id만 받아 attemptNo를 모른다.
 
 부수적으로 `findByStatusOrderByIdAsc(JobStatus)`와 `findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus,
