@@ -27,7 +27,6 @@ public class Organization extends BaseEntity {
     @Column(nullable = false)
     private long balance;
 
-    /** 이름과 초기 잔액으로 조직을 생성한다. */
     public Organization(String name, long balance) {
         this.name = name;
         this.balance = balance;

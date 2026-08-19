@@ -82,7 +82,6 @@ class HeartbeatRegistryTest {
 
         ScheduledFuture<?> future = registry.startHeartbeat(1L);
 
-        // 첫 동기 touch 1회 + 1초 주기 갱신 2회 이상 = 스케줄이 억제되지 않았다는 증거
         verify(zSetOperations, timeout(5000).atLeast(3)).add(eq(KEY), eq("1"), anyDouble());
         assertThat(future.isDone()).isFalse();
         future.cancel(false);
@@ -180,15 +179,12 @@ class HeartbeatRegistryTest {
                 .thenThrow(new RedisConnectionFailureException("redis down"))
                 .thenReturn(Set.of("21", "22"));
 
-        // 장애로 실패 시각이 기록된다
         assertThat(registry.findExpiredJobIds()).isEmpty();
 
-        // Redis는 복구됐지만 유예(timeout 10초)가 끝나지 않았다
         clock.advance(Duration.ofSeconds(9));
         assertThat(registry.findExpiredJobIds()).isEmpty();
         verify(zSetOperations, times(1)).rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble());
 
-        // 유예가 끝나면 다시 조회한다
         clock.advance(Duration.ofSeconds(2));
         assertThat(registry.findExpiredJobIds()).containsExactlyInAnyOrder(21L, 22L);
     }
@@ -201,12 +197,10 @@ class HeartbeatRegistryTest {
 
         assertThat(registry.hasLiveHeartbeat(31L)).isTrue();
 
-        // 유예 구간에서는 조회 없이 살아있다고 본다
         clock.advance(Duration.ofSeconds(9));
         assertThat(registry.hasLiveHeartbeat(32L)).isTrue();
         verify(zSetOperations, never()).score(KEY, "32");
 
-        // 유예가 끝나면 score를 실제로 조회한다 (미등록 = null → 만료)
         clock.advance(Duration.ofSeconds(2));
         assertThat(registry.hasLiveHeartbeat(32L)).isFalse();
         verify(zSetOperations).score(KEY, "32");
@@ -287,7 +281,6 @@ class HeartbeatRegistryTest {
         continueOutage(Duration.ofSeconds(60));
 
         assertThat(errorLogs()).hasSize(1);
-        // 지속 시간과 회수 억제 사실이 로그에서 드러나야 "회수할 게 없음"과 구분된다
         assertThat(errorLogs().get(0).getFormattedMessage())
                 .contains("60초")
                 .contains("회수가 그동안 계속 억제");
@@ -301,7 +294,6 @@ class HeartbeatRegistryTest {
         continueOutage(Duration.ofSeconds(60));
         assertThat(errorLogs()).hasSize(1);
 
-        // 임계치 주기가 다시 차기 전에는 판정이 여러 번 일어나도 늘어나지 않는다
         continueOutage(Duration.ofSeconds(55));
         assertThat(errorLogs()).hasSize(1);
 
@@ -319,13 +311,11 @@ class HeartbeatRegistryTest {
         continueOutage(Duration.ofSeconds(60));
         assertThat(errorLogs()).hasSize(1);
 
-        // 더 이상 실패가 없으면 유예(timeout 10초)가 풀리고 회수가 재개된다
         clock.advance(Duration.ofSeconds(11));
         assertThat(registry.findExpiredJobIds()).isEmpty();
         assertThat(infoLogs()).hasSize(1);
         assertThat(infoLogs().get(0).getFormattedMessage()).contains("회수를 재개");
 
-        // 새 장애는 지속 시간이 0부터 다시 세어진다. 리셋이 안 되면 첫 판정에서 곧바로 경보가 나간다.
         beginOutage();
         continueOutage(Duration.ofSeconds(55));
         assertThat(errorLogs()).hasSize(1);
@@ -340,16 +330,10 @@ class HeartbeatRegistryTest {
                 .thenThrow(new RedisConnectionFailureException("redis down"));
     }
 
-    /** Redis 실패를 한 번 일으켜 억제를 시작시킨다. remove는 유예 중에도 계속 호출되는 경로다. */
     private void beginOutage() {
         registry.remove(99L);
     }
 
-    /**
-     * 장애가 이어지는 상황을 재현한다.
-     * 실제 운영에서는 touch가 refreshInterval마다 실패해 유예를 재무장하므로,
-     * 유예(timeout 10초)보다 짧은 5초 간격으로 실패와 판정을 반복한다.
-     */
     private void continueOutage(Duration duration) {
         for (long elapsed = 0; elapsed < duration.getSeconds(); elapsed += 5) {
             clock.advance(Duration.ofSeconds(5));
@@ -370,7 +354,6 @@ class HeartbeatRegistryTest {
         return logAppender.list.stream().filter(event -> event.getLevel() == level).toList();
     }
 
-    /** 유예 만료를 실제 대기 없이 검증하기 위한 수동 진행 시계다. */
     static final class MutableClock extends Clock {
 
         private volatile Instant instant;

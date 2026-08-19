@@ -27,13 +27,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Load test comparing three balance-deduction strategies: optimistic locking,
- * pessimistic locking, and conditional UPDATE (the current production approach).
- *
- * Excluded from the default `test` task via the "benchmark" tag; run explicitly with
- * `./gradlew benchmark`.
- */
 @Tag("benchmark")
 @Testcontainers
 @ActiveProfiles("test")
@@ -141,11 +134,9 @@ class BalanceStrategyBenchmark {
 
         for (int concurrency : concurrencyLevels) {
             for (DeductStrategy strategy : strategies) {
-                // Warmup round: results discarded.
                 resetBalance(initialBalance);
                 BenchmarkHarness.run(strategy, concurrency, warmup, ACCOUNT_ID, AMOUNT);
 
-                // Measurement round.
                 resetBalance(initialBalance);
                 BenchmarkResult result = BenchmarkHarness.run(strategy, concurrency, requests, ACCOUNT_ID, AMOUNT);
                 results.add(result);

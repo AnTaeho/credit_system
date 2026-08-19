@@ -42,7 +42,6 @@ public class Job extends BaseEntity {
 
     private String resultUrl;
 
-    /** 차감 대기 상태의 작업을 생성한다. */
     private Job(Long organizationId, long holdAmount, String prompt) {
         this.organizationId = organizationId;
         this.status = JobStatus.HOLDING;
@@ -51,7 +50,6 @@ public class Job extends BaseEntity {
         this.prompt = prompt;
     }
 
-    /** 차감 대기 작업을 생성한다. */
     public static Job hold(Long organizationId, long holdAmount, String prompt) {
         return new Job(organizationId, holdAmount, prompt);
     }

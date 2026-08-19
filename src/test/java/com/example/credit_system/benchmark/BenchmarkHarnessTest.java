@@ -11,13 +11,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * 하네스가 워커 예외를 삼키지 않는지 검증한다.
- *
- * 예외가 묻히면 success + failure < requests가 되고, 실행되지 않은 구간이 0으로 남아
- * 백분위수가 실제보다 낮게 나온다. DB 없이 재현하려고 인메모리 fake 전략을 쓰며,
- * 벤치마크 본체와 달리 "benchmark" 태그를 붙이지 않아 기본 test 태스크에서 돌아간다.
- */
 class BenchmarkHarnessTest {
 
     private static final long ACCOUNT_ID = 1L;
@@ -33,7 +26,6 @@ class BenchmarkHarnessTest {
 
         assertThat(result.successCount() + result.failureCount()).isEqualTo(40);
         assertThat(strategy.invocations()).isEqualTo(40);
-        // 잔고 10_000 / 100 = 100회분이므로 40회는 전부 성공해야 한다.
         assertThat(result.successCount()).isEqualTo(40);
     }
 
@@ -42,7 +34,6 @@ class BenchmarkHarnessTest {
     @DisplayName("워커 하나가 터지면 원인 예외를 붙여 실행을 실패시킨다")
     void failsRunAndKeepsCauseWhenOneWorkerThrows() {
         RuntimeException lockTimeout = new RuntimeException("Lock wait timeout exceeded");
-        // 첫 호출만 터뜨려 정확히 한 워커만 이탈시킨다.
         InMemoryStrategy strategy = new InMemoryStrategy(10_000L, invocation -> invocation == 1, lockTimeout);
 
         assertThatThrownBy(() -> BenchmarkHarness.run(strategy, 4, 40, ACCOUNT_ID, AMOUNT))
@@ -63,7 +54,6 @@ class BenchmarkHarnessTest {
 
         assertThat(thrown).isInstanceOf(IllegalStateException.class);
         assertThat(thrown.getCause()).isSameAs(lockTimeout);
-        // 워커 4개가 전부 첫 호출에서 터지므로 원인 1 + suppressed 3.
         assertThat(thrown.getSuppressed()).hasSize(3);
         assertThat(thrown.getSuppressed()).allSatisfy(s -> assertThat(s).isSameAs(lockTimeout));
     }
@@ -77,7 +67,6 @@ class BenchmarkHarnessTest {
 
         Throwable thrown = catchRun(strategy, 4, 40);
 
-        // 부분 실행 통계가 정상 결과로 새어 나가면 여기서 thrown이 null이 된다.
         assertThat(thrown).isNotNull();
     }
 
@@ -90,10 +79,6 @@ class BenchmarkHarnessTest {
         }
     }
 
-    /**
-     * DB 대신 AtomicLong 잔고를 쓰는 fake. failWhen이 참인 호출에서 지정한 예외를 던져
-     * 락 타임아웃 같은 RuntimeException 상황을 재현한다.
-     */
     private static final class InMemoryStrategy implements DeductStrategy {
 
         private final ConcurrentHashMap<Long, AtomicLong> balances = new ConcurrentHashMap<>();

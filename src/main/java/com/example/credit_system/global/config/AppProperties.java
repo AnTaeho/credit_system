@@ -16,18 +16,8 @@ public record AppProperties(
     public record Stub(double failureRate, long minDelayMillis, long maxDelayMillis) {
     }
 
-    /**
-     * heartbeat 유효 기간, 갱신 주기, 회수 억제 경보 임계치를 정의한다.
-     *
-     * @param suppressionAlertSeconds Redis 장애로 회수가 이 시간(초) 넘게 억제되면 ERROR로 경보한다
-     */
     public record Heartbeat(long timeoutSeconds, long refreshIntervalSeconds, long suppressionAlertSeconds) {
 
-        /**
-         * 복구 유예의 전제를 시작 시점에 검증한다.
-         * 유예 길이가 timeoutSeconds인데 갱신 주기가 그보다 길면 살아있는 워커가 유예 안에서 단 한 번도
-         * touch에 성공하지 못해, 유예가 풀리는 순간 정상 job이 만료로 회수된다.
-         */
         public Heartbeat {
             if (timeoutSeconds < 1) {
                 throw new IllegalArgumentException(

@@ -26,7 +26,6 @@ public class OptimisticLockStrategy implements DeductStrategy {
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             Boolean outcome = attemptOnce(accountId, amount);
             if (outcome == null) {
-                // insufficient balance, no point retrying
                 return new DeductOutcome(false, attempt);
             }
             if (outcome) {
@@ -36,10 +35,6 @@ public class OptimisticLockStrategy implements DeductStrategy {
         return new DeductOutcome(false, MAX_ATTEMPTS - 1);
     }
 
-    /**
-     * @return true if the deduction succeeded, false if the optimistic lock was lost
-     * (should retry), or null if the balance was insufficient (no point retrying).
-     */
     private Boolean attemptOnce(long accountId, long amount) {
         return requiresNewTransactionTemplate.execute(status -> {
             AccountSnapshot snapshot = jdbcTemplate.queryForObject(

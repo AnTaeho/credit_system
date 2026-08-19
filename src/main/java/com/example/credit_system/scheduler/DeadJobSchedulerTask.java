@@ -26,7 +26,6 @@ public class DeadJobSchedulerTask {
     private final RefundService refundService;
     private final AppProperties appProperties;
 
-    /** 만료되거나 실패한 작업을 찾아 재시도 또는 환불한다. */
     @Scheduled(fixedDelayString = "${app.scheduling.dead-job-scan-interval-millis:5000}")
     public void scan() {
         for (Long jobId : heartbeatRegistry.findExpiredJobIds()) {
@@ -38,7 +37,6 @@ public class DeadJobSchedulerTask {
         }
     }
 
-    /** heartbeat가 없는 오래된 PROCESSING 작업을 실패 상태로 회수한다. */
     private void reapStaleProcessing() {
         Instant cutoff = Instant.now().minusSeconds(appProperties.processing().timeoutSeconds());
         for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.PROCESSING, cutoff)) {
@@ -54,7 +52,6 @@ public class DeadJobSchedulerTask {
         }
     }
 
-    /** heartbeat가 만료된 작업을 실패 상태로 변경한다. */
     private void markExpiredAsFailed(Long jobId) {
         jobRepository.findById(jobId).ifPresentOrElse(job -> {
             int updated = jobRepository.transitionIfStatusAndAttemptMatch(
@@ -66,7 +63,6 @@ public class DeadJobSchedulerTask {
         }, () -> heartbeatRegistry.remove(jobId));
     }
 
-    /** 최신 실패 상태를 확인해 재시도 또는 환불을 수행한다. */
     private void process(Job job) {
         Job current = jobRepository.findById(job.getId()).orElse(null);
         if (current == null || current.getStatus() != JobStatus.FAILED) {

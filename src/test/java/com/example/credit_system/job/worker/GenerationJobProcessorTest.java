@@ -63,7 +63,6 @@ class GenerationJobProcessorTest {
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 
-    /** 순간적인 DB 장애로 이미 만들어진 유료 생성 결과를 버리지 않아야 한다. */
     @Test
     void 결과_반영이_실패해도_재시도가_성공하면_결과를_살린다() {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");
@@ -78,10 +77,6 @@ class GenerationJobProcessorTest {
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 
-    /**
-     * 재시도를 모두 소진해도 FAILED로 바꾸지 않는다. 즉시 재시도가 걸려 유료 외부 생성이 곧바로
-     * 중복 실행되는 것을 막고, 다음 시도를 timeout 회수 경로 한 곳으로 몰아주기 위해서다.
-     */
     @Test
     void 결과_반영_재시도를_모두_소진하면_FAILED로_바꾸지_않고_PROCESSING을_유지한다() {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");

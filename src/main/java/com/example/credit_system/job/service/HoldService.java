@@ -33,7 +33,6 @@ public class HoldService {
     private final LedgerRepository ledgerRepository;
     private final AppProperties appProperties;
 
-    /** 멱등성을 보장하며 비용을 차감하고 생성 작업을 등록한다. */
     @Transactional
     public HoldResult requestGeneration(Long organizationId, String idemKey, String prompt) {
         validateRequest(idemKey, prompt);
@@ -51,17 +50,13 @@ public class HoldService {
         deductBalance(organizationId, cost);
         Job job = jobRepository.save(Job.hold(organizationId, cost, prompt));
 
-        int attached = idempotencyKeyRepository.attachJobId(organizationId, idemKey, job.getId());
-        if (attached != 1) {
-            throw new IllegalStateException("idempotency key에 jobId 연결 실패: organizationId=" + organizationId
-                    + ", idemKey=" + idemKey + ", jobId=" + job.getId());
-        }
+        attachIdemKeyToJob(organizationId, idemKey, job);
+
         ledgerRepository.save(LedgerEntry.of(organizationId, job.getId(), LedgerType.HOLD, -cost));
         log.info("hold 완료: organizationId={}, jobId={}, cost={}", organizationId, job.getId(), cost);
         return new HoldResult(job.getId(), false);
     }
 
-    /** 생성 요청 값이 저장 가능한 범위인지 검증한다. */
     private void validateRequest(String idemKey, String prompt) {
         if (idemKey == null || idemKey.isBlank()) {
             throw new InvalidRequestException("idemKey는 필수입니다.");
@@ -77,7 +72,6 @@ public class HoldService {
         }
     }
 
-    /** 기존 멱등 키를 중복 요청 결과로 변환한다. */
     private HoldResult toDuplicateResult(IdempotencyKey existing) {
         if (existing.getJobId() == null) {
             throw new DuplicateRequestInProgressException();
@@ -86,7 +80,6 @@ public class HoldService {
         return new HoldResult(existing.getJobId(), true);
     }
 
-    /** 잔액이 충분하면 비용을 원자적으로 차감한다. */
     private void deductBalance(Long organizationId, long cost) {
         int updated = organizationRepository.deductBalance(organizationId, cost, Instant.now());
         if (updated == 1) {
@@ -96,5 +89,13 @@ public class HoldService {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));
         throw new InsufficientBalanceException(organization.getBalance(), cost);
+    }
+
+    private void attachIdemKeyToJob(Long organizationId, String idemKey, Job job) {
+        int attached = idempotencyKeyRepository.attachJobId(organizationId, idemKey, job.getId());
+        if (attached != 1) {
+            throw new IllegalStateException("idempotency key에 jobId 연결 실패: organizationId=" + organizationId
+                    + ", idemKey=" + idemKey + ", jobId=" + job.getId());
+        }
     }
 }

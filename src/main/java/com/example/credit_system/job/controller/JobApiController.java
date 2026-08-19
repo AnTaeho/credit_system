@@ -24,7 +24,6 @@ public class JobApiController {
     private final HoldService holdService;
     private final JobRepository jobRepository;
 
-    /** 생성 작업을 접수한다. */
     @PostMapping
     public JobCreateResponse create(@RequestHeader("X-Organization-Id") Long organizationId,
                                     @RequestBody JobCreateRequest request) {
@@ -32,7 +31,6 @@ public class JobApiController {
         return new JobCreateResponse(result.jobId(), result.duplicate());
     }
 
-    /** 요청 조직의 작업 목록을 반환한다. */
     @GetMapping
     public List<JobResponse> list(@RequestHeader("X-Organization-Id") Long organizationId) {
         return jobRepository.findByOrganizationIdOrderByIdDesc(organizationId).stream()

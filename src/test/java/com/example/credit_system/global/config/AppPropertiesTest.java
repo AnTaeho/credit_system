@@ -14,7 +14,6 @@ class AppPropertiesTest {
 
     @Test
     void refresh_interval이_timeout_이상이면_거부한다() {
-        // 유예(timeout) 안에서 살아있는 워커가 단 한 번도 touch에 성공하지 못해 정상 job이 회수된다
         assertThatThrownBy(() -> new AppProperties.Heartbeat(10, 15, 60))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("refresh-interval-seconds")

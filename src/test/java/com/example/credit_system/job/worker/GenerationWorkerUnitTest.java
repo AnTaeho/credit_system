@@ -66,10 +66,6 @@ class GenerationWorkerUnitTest {
         verify(jobProcessor, never()).process(job);
     }
 
-    /**
-     * 선점 UPDATE가 DB 장애로 던질 때 permit이 새면 concurrency회 누적만으로 워커가 영구 정지한다.
-     * DB가 회복된 뒤 다시 dispatch되는지까지 확인해야 회귀를 잡을 수 있다.
-     */
     @Test
     void 선점_UPDATE가_반복_실패해도_permit이_고갈되지_않는다() {
         doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
@@ -90,10 +86,6 @@ class GenerationWorkerUnitTest {
         verify(jobProcessor).process(job);
     }
 
-    /**
-     * dispatch에 성공하면 permit 반납 책임은 executor 스레드로 넘어간다.
-     * 호출 스레드가 한 번 더 반납하면 동시 실행 상한이 조용히 늘어난다.
-     */
     @Test
     void dispatch에_성공하면_permit을_이중_반납하지_않는다() {
         doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
@@ -105,7 +97,6 @@ class GenerationWorkerUnitTest {
         assertThat(availablePermits()).isEqualTo(CONCURRENCY);
     }
 
-    /** 롤백 UPDATE까지 실패해도 permit은 반납되어야 한다. 롤백 실패 작업은 timeout 회수 경로가 맡는다. */
     @Test
     void executor_위임과_롤백이_모두_실패해도_permit을_반납한다() {
         GenerationWorker rejectingWorker = new GenerationWorker(jobRepository, jobProcessor,
@@ -123,7 +114,6 @@ class GenerationWorkerUnitTest {
         verify(jobProcessor, never()).process(job);
     }
 
-    /** 한 작업의 선점 실패가 루프를 중단시키면 같은 배치의 남은 작업이 통째로 다음 주기로 밀린다. */
     @Test
     void 한_작업의_선점_실패가_같은_배치의_나머지_작업을_막지_않는다() {
         Job second = Job.hold(10L, 100L, "dog");
@@ -139,7 +129,6 @@ class GenerationWorkerUnitTest {
         assertThat(availablePermits()).isEqualTo(CONCURRENCY);
     }
 
-    /** dispatch가 성공하기 전까지 permit이 유지되어야 하므로, 처리 도중 관측한 permit 수로도 상한을 확인한다. */
     @Test
     void 처리_중에는_permit이_점유되어_있다() {
         doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());

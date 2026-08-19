@@ -21,14 +21,12 @@ public class OrganizationApiController {
     private final OrganizationRepository organizationRepository;
     private final ChargeService chargeService;
 
-    /** 요청 조직의 현재 잔액을 반환한다. */
     @GetMapping("/me/balance")
     public BalanceResponse myBalance(@RequestHeader("X-Organization-Id") Long organizationId) {
         Organization organization = organizationRepository.findById(organizationId).orElseThrow();
         return new BalanceResponse(organization.getBalance());
     }
 
-    /** 요청 조직의 잔액을 충전한다. */
     @PostMapping("/me/charge")
     public BalanceResponse charge(@RequestHeader("X-Organization-Id") Long organizationId,
                                   @RequestBody ChargeRequest request) {

@@ -23,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest
 class ServiceTransactionRollbackTest {
 
-    @Autowired HoldService holdService;
+    @Autowired
+    HoldService holdService;
     @Autowired RefundService refundService;
     @Autowired IdempotencyKeyRepository idempotencyKeyRepository;
     @Autowired JobRepository jobRepository;

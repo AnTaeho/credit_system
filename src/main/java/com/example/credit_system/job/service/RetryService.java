@@ -16,7 +16,6 @@ public class RetryService {
 
     private final JobRepository jobRepository;
 
-    /** 실패한 작업의 시도 번호를 높여 DB 작업 큐에 다시 대기시킨다. */
     @Transactional
     public void retry(Job job) {
         int updated = jobRepository.incrementAttemptForRetry(job.getId(), job.getAttemptNo(), Instant.now());
