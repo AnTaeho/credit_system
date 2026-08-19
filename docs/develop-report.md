@@ -15,8 +15,8 @@
 | # | 항목 | 위치 | 상태 |
 |---|---|---|---|
 | 1 | `scan()` 루프 예외 격리 없음 | `DeadJobSchedulerTask.scan` | ✅ 완료 (2026-08-19) |
-| 2 | FAILED 조회 무페이징 + `process()`의 중복 `findById` | `DeadJobSchedulerTask.processFailedJobs` | **다음 작업** |
-| 3 | 재시도 백오프 없음 (즉시 HOLDING 복귀) | `JobLifecycleService.retry` | 미착수 |
+| 2 | FAILED 조회 무페이징 + `process()`의 중복 `findById` | `DeadJobSchedulerTask` | ✅ 완료 (2026-08-19) |
+| 3 | 재시도 백오프 없음 (즉시 HOLDING 복귀) | `JobLifecycleService.retry` | **다음 작업** |
 | 4 | `organizationId` 인덱스 없음 | `JobRepository:78`, `LedgerRepository:10` | 미착수 |
 | 5 | heartbeat 스케줄러 단일 스레드 + Redis 커맨드 타임아웃 미설정 | `HeartbeatRegistry.java:48` | 미착수 |
 | 6 | 존재하지 않는 조직 ID → 500 | `OrganizationApiController:26`, `HoldService.deductBalance`, `ChargeService.charge` | 미착수 |
@@ -50,6 +50,23 @@ id 순서상 뒤에 있던 job은 그 주기에 처리되지 않았다.
 
 이제 페이징(2번)을 안전하게 넣을 수 있다. 예외 격리가 없는 상태에서 페이징을 먼저 넣었다면 예외를
 던지는 job이 첫 페이지를 계속 점유했을 것이다.
+
+## 완료: 스캔 조회 페이징 + 재조회 제거 (2026-08-19)
+
+`processFailedJobs()`와 `reapStaleProcessing()`의 조회에 `PageRequest.of(0, 100)` 상한을 걸었다. 정상
+상태에서는 매 주기 배출되므로 폭증하지 않지만, 워커가 오래 죽었다 살아난 뒤의 버스트를 방어한다.
+배치 크기는 설정이 아니라 `SCAN_BATCH_SIZE` 클래스 상수다 — 배포마다 조절할 튜닝 노브가 아니라
+방어적 상한이라고 판단했다.
+
+`process()`의 `findById` 재조회를 없애고 스냅샷으로 바로 판단하게 했다. 재조회는 이 프로젝트가 쓰지
+않겠다고 선언한 check-then-act였고, `retry`/`finalRefund`가 `(id, status=FAILED, attemptNo)` 조건부
+UPDATE로 fencing하므로 낡은 스냅샷은 0행으로 무시되고 다음 주기에 자기 교정된다. attemptNo는 재시도마다
+증가하고 REFUNDED는 종결이라 ABA 문제도 없다. `markExpiredAsFailed`의 `findById`는 남겼다 — 거기선
+heartbeat에서 id만 받아 attemptNo를 모른다.
+
+부수적으로 `findByStatusOrderByIdAsc(JobStatus)`와 `findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus,
+Instant)` 무페이징 버전을 제거했다. 후자는 `JobRepositoryTest`만 쓰고 있어 그 테스트를 Pageable 버전으로
+옮겼다. 전체 테스트 103건 → 105건.
 
 ## 알려진 트레이드오프 (수정 대상 아님)
 

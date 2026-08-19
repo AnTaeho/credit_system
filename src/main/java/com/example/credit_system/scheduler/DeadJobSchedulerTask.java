@@ -8,6 +8,7 @@ import com.example.credit_system.job.service.JobLifecycleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,8 @@ import java.time.Instant;
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "app.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class DeadJobSchedulerTask {
+
+    private static final int SCAN_BATCH_SIZE = 100;
 
     private final HeartbeatRegistry heartbeatRegistry;
     private final JobRepository jobRepository;
@@ -55,7 +58,8 @@ public class DeadJobSchedulerTask {
 
     private void reapStaleProcessing() {
         Instant cutoff = Instant.now().minusSeconds(appProperties.processing().timeoutSeconds());
-        for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus.PROCESSING, cutoff)) {
+        for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
+                JobStatus.PROCESSING, cutoff, PageRequest.of(0, SCAN_BATCH_SIZE))) {
             try {
                 reapIfNoHeartbeat(job);
             } catch (RuntimeException e) {
@@ -77,7 +81,7 @@ public class DeadJobSchedulerTask {
     }
 
     private void processFailedJobs() {
-        for (Job job : jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)) {
+        for (Job job : jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED, PageRequest.of(0, SCAN_BATCH_SIZE))) {
             try {
                 process(job);
             } catch (RuntimeException e) {
@@ -98,14 +102,10 @@ public class DeadJobSchedulerTask {
     }
 
     private void process(Job job) {
-        Job current = jobRepository.findById(job.getId()).orElse(null);
-        if (current == null || current.getStatus() != JobStatus.FAILED) {
-            return;
-        }
-        if (current.getAttemptNo() + 1 < appProperties.generation().maxAttempts()) {
-            jobLifecycleService.retry(current);
+        if (job.getAttemptNo() + 1 < appProperties.generation().maxAttempts()) {
+            jobLifecycleService.retry(job);
         } else {
-            jobLifecycleService.finalRefund(current);
+            jobLifecycleService.finalRefund(job);
         }
     }
 }

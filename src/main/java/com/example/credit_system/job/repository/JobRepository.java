@@ -71,11 +71,9 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                  @Param("expectedAttemptNo") int expectedAttemptNo,
                                  @Param("now") Instant now);
 
-    List<Job> findByStatusOrderByIdAsc(JobStatus status);
-
     List<Job> findByStatusOrderByIdAsc(JobStatus status, Pageable pageable);
 
     List<Job> findByOrganizationIdOrderByIdDesc(Long organizationId);
 
-    List<Job> findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus status, Instant cutoff);
+    List<Job> findByStatusAndUpdatedAtBeforeOrderByIdAsc(JobStatus status, Instant cutoff, Pageable pageable);
 }

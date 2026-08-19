@@ -3,7 +3,7 @@
 Organization이 공유하는 크레딧을 선결제/차감하고, 비동기 이미지 생성(stub) 실패 시 정확히 환불하는 것을
 목표로 한 포트폴리오 프로젝트다. 핵심 주장은 "크레딧은 항상 정확하게 차감·환불된다"이며, 이를
 check-then-act 대신 **조건부 UPDATE/INSERT 하나로 확인+실행을 원자화**하는 설계 원칙과 attemptNo
-fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 103건의 테스트로 증명한다.
+fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 105건의 테스트로 증명한다.
 이미지 생성 자체는 관심사가 아니므로 지연+확률적 실패를 가진 `GenerationStubClient`로 대체돼 있다.
 
 ## 1. 프로젝트 개요

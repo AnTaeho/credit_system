@@ -5,6 +5,7 @@ import com.example.credit_system.job.domain.JobStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -142,9 +143,9 @@ class JobRepositoryTest {
                 job.getId(), JobStatus.HOLDING, JobStatus.HOLDING, 0, staleUpdatedAt);
 
         List<Job> caught = jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
-                JobStatus.HOLDING, Instant.now());
+                JobStatus.HOLDING, Instant.now(), PageRequest.of(0, 10));
         List<Job> notCaught = jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
-                JobStatus.HOLDING, Instant.now().minusSeconds(300));
+                JobStatus.HOLDING, Instant.now().minusSeconds(300), PageRequest.of(0, 10));
 
         assertThat(caught).extracting(Job::getId).containsExactly(job.getId());
         assertThat(notCaught).isEmpty();
