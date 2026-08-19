@@ -14,7 +14,6 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.concurrent.Semaphore;
 
 @Slf4j
 @Component
@@ -25,7 +24,6 @@ public class GenerationWorker {
     private final GenerationJobProcessor jobProcessor;
     private final TaskExecutor workerExecutor;
     private final int batchSize;
-    private final Semaphore availableWorkers;
 
     public GenerationWorker(JobRepository jobRepository,
                             GenerationJobProcessor jobProcessor,
@@ -35,41 +33,43 @@ public class GenerationWorker {
         this.jobProcessor = jobProcessor;
         this.workerExecutor = workerExecutor;
         this.batchSize = workerProperties.batchSize();
-        this.availableWorkers = new Semaphore(workerProperties.concurrency());
     }
 
     @Scheduled(fixedDelayString = "${app.scheduling.worker-interval-millis:500}")
     public void processPendingJobs() {
         List<Job> jobs = jobRepository.findByStatusOrderByIdAsc(JobStatus.HOLDING, PageRequest.of(0, batchSize));
         for (Job job : jobs) {
-            if (!availableWorkers.tryAcquire()) {
-                return;
-            }
-            boolean handedOff = false;
             try {
-                handedOff = claimAndDispatch(job);
+                if (!claim(job)) {
+                    continue;
+                }
             } catch (RuntimeException e) {
                 log.warn("생성 작업 선점 실패: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
-            } finally {
-                if (!handedOff) {
-                    availableWorkers.release();
-                }
+                continue;
+            }
+            if (!dispatch(job)) {
+                return;
             }
         }
     }
 
-    boolean claimAndDispatch(Job job) {
+    boolean claim(Job job) {
         int updated = jobRepository.startProcessingIfAttemptMatches(
                 job.getId(), job.getAttemptNo(), Instant.now());
         if (updated == 0) {
             log.info("다른 워커가 선점했거나 무효한 작업 무시: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
             return false;
         }
+        return true;
+    }
+
+    boolean dispatch(Job job) {
         try {
-            workerExecutor.execute(() -> processAndRelease(job));
+            workerExecutor.execute(() -> jobProcessor.process(job));
             return true;
         } catch (RuntimeException e) {
-            log.warn("생성 작업 executor 위임 실패: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
+            log.warn("생성 작업 executor 위임 실패, 이번 주기 중단: jobId={}, attemptNo={}",
+                    job.getId(), job.getAttemptNo(), e);
             rollbackToHolding(job);
             return false;
         }
@@ -81,14 +81,6 @@ public class GenerationWorker {
                     job.getId(), JobStatus.HOLDING, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
         } catch (RuntimeException e) {
             log.error("선점 롤백 실패, timeout 회수 대기: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
-        }
-    }
-
-    private void processAndRelease(Job job) {
-        try {
-            jobProcessor.process(job);
-        } finally {
-            availableWorkers.release();
         }
     }
 }

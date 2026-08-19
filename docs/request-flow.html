@@ -543,7 +543,7 @@
         <ul>
           <li><code>@Scheduled(fixedDelay = app.scheduling.worker-interval-millis, 기본 500ms)</code></li>
           <li><code>findByStatusOrderByIdAsc(HOLDING, PageRequest.of(0, app.worker.batch-size))</code> — 한 주기 조회 상한 20건. <code>jobs(status, id)</code> 인덱스가 이 조회를 받쳐준다</li>
-          <li>작업마다 <code>Semaphore.tryAcquire()</code>로 실행 슬롯을 <strong>먼저</strong> 확보한다. 없으면 이번 주기는 즉시 종료 — 실행되지 못할 job을 미리 PROCESSING으로 만들지 않는다</li>
+          <li>job마다 <strong>선점(claim) 후 위임(dispatch)</strong> 순서로 처리한다 — 슬롯을 미리 확보하지 않는다. 선점에 성공한 job만 <code>generationWorkerExecutor</code>에 위임을 시도하고, 위임이 거부되면 그 job을 HOLDING으로 롤백한 뒤 <strong>이번 주기를 즉시 중단</strong>한다 (남은 job은 다음 폴링에서 다시 조회된다)</li>
           <li><code>jobRepository.startProcessingIfAttemptMatches(jobId, attemptNo, now)</code><br><code>UPDATE job SET status='PROCESSING' WHERE id=? AND status='HOLDING' AND attempt_no=?</code> — <strong>선점 + attemptNo fencing</strong>. 0행이면 다른 워커가 이미 가져갔거나 무효한 시도이므로 건너뛴다. 여러 인스턴스가 같은 목록을 읽어도 실행은 하나뿐</li>
           <li>선점 성공분만 <code>generationWorkerExecutor</code>로 위임. 위임이 거부되면 <code>transitionIfStatusAndAttemptMatch(HOLDING ← PROCESSING)</code>으로 즉시 되돌려 다음 폴링에서 다시 잡히게 한다 (롤백마저 실패하면 ⑦의 timeout 회수에 맡긴다)</li>
         </ul>
@@ -565,7 +565,7 @@
       <div class="step-desc">
         <ul>
           <li>core/max pool = <code>app.worker.concurrency</code>(3), <strong><code>queueCapacity = 0</code></strong> — executor는 대기열을 갖지 않는다. 대기열 역할은 DB의 HOLDING 상태가 한다</li>
-          <li>같은 값으로 만든 <code>Semaphore</code> permit이 동시 실행 상한을 지키고, permit은 실행 종료 시 <code>finally</code>에서 반드시 반납된다</li>
+          <li>동시 실행 상한은 <strong>executor 혼자</strong> 지킨다 — <code>queueCapacity</code>가 0 이하면 Spring의 <code>ThreadPoolTaskExecutor</code>는 내부적으로 <code>SynchronousQueue</code>를 쓰므로, 스레드 3개가 모두 사용 중일 때 <code>execute()</code>를 호출하면 <code>TaskRejectedException</code>이 던져진다 — 이 거부가 ③의 롤백·주기 중단 신호가 된다</li>
           <li>폴링 스레드와 분리된 풀(<code>generation-worker-*</code>)이라 3~7초짜리 외부 호출이 스케줄러를 붙들지 않는다. <code>spring.task.scheduling.pool.size=2</code>로 워커 폴링과 ⑦의 스캔도 서로 밀리지 않게 분리</li>
           <li><code>WorkerProperties</code>가 <code>batch-size</code>·<code>concurrency</code>를 기동 시점에 검증한다 (1 미만이면 시작 실패)</li>
         </ul>

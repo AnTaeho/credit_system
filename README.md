@@ -111,9 +111,11 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
   지난 job만 스캔. Redis 장애 중에는 회수를 억제하되, 억제가
   `app.heartbeat.suppression-alert-seconds`(60초)를 넘기면 ERROR로 경보한다
 - **워커 동시 실행 상한**: `app.worker.concurrency`(3)가 전용 executor(`generationWorkerExecutor`)의
-  스레드 수와 `Semaphore` permit 수를 함께 결정하고, executor 내부 큐 용량은 0이다 — 대기열 역할은 DB의
-  HOLDING 상태가 하므로 선점만 해두고 실행되지 않는 job이 생기지 않는다. `app.worker.batch-size`(20)는
-  한 폴링 주기의 조회 상한이고, `spring.task.scheduling.pool.size`(2)는 워커 폴링과
+  스레드 수를 단독으로 결정한다 — executor 내부 큐 용량은 0이라 Spring의 `ThreadPoolTaskExecutor`는
+  내부적으로 `SynchronousQueue`를 쓰고, 스레드가 모두 사용 중이면 `execute()`가 즉시 거부한다. 워커는
+  이 거부를 신호로 선점한 job을 HOLDING으로 롤백하고 그 주기를 중단하므로, 선점만 해두고 실행되지
+  않는 job이 생기지 않는다. `app.worker.batch-size`(20)는 한 폴링 주기의 조회 상한이고,
+  `spring.task.scheduling.pool.size`(2)는 워커 폴링과
   `DeadJobSchedulerTask`가 같은 스케줄러 스레드를 두고 경합하지 않게 한다. 두 값은 `WorkerProperties`가
   기동 시점에 검증한다(1 미만이면 시작 실패)
 

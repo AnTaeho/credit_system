@@ -11,16 +11,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.Semaphore;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -59,15 +59,16 @@ class GenerationWorkerUnitTest {
 
     @Test
     void 다른_워커가_선점한_작업은_외부_처리기로_넘기지_않는다() {
-        when(jobRepository.startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class))).thenReturn(0);
+        doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
+        doReturn(0).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
 
-        worker.claimAndDispatch(job);
+        worker.processPendingJobs();
 
         verify(jobProcessor, never()).process(job);
     }
 
     @Test
-    void 선점_UPDATE가_반복_실패해도_permit이_고갈되지_않는다() {
+    void 선점_UPDATE가_반복_실패해도_이후_주기에서_다시_처리한다() {
         doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
         doThrow(new QueryTimeoutException("db unavailable"))
                 .when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
@@ -76,7 +77,6 @@ class GenerationWorkerUnitTest {
             worker.processPendingJobs();
         }
 
-        assertThat(availablePermits()).isEqualTo(CONCURRENCY);
         verify(jobProcessor, never()).process(job);
 
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
@@ -87,18 +87,7 @@ class GenerationWorkerUnitTest {
     }
 
     @Test
-    void dispatch에_성공하면_permit을_이중_반납하지_않는다() {
-        doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
-        doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
-
-        worker.processPendingJobs();
-
-        verify(jobProcessor).process(job);
-        assertThat(availablePermits()).isEqualTo(CONCURRENCY);
-    }
-
-    @Test
-    void executor_위임과_롤백이_모두_실패해도_permit을_반납한다() {
+    void executor_위임과_롤백이_모두_실패해도_예외가_새어나가지_않는다() {
         GenerationWorker rejectingWorker = new GenerationWorker(jobRepository, jobProcessor,
                 task -> { throw new IllegalStateException("executor shutdown"); },
                 new WorkerProperties(true, 20, CONCURRENCY));
@@ -108,9 +97,8 @@ class GenerationWorkerUnitTest {
                 .transitionIfStatusAndAttemptMatch(eq(1L), eq(JobStatus.HOLDING), eq(JobStatus.PROCESSING),
                         eq(0), any(Instant.class));
 
-        rejectingWorker.processPendingJobs();
+        assertThatCode(rejectingWorker::processPendingJobs).doesNotThrowAnyException();
 
-        assertThat(availablePermits(rejectingWorker)).isEqualTo(CONCURRENCY);
         verify(jobProcessor, never()).process(job);
     }
 
@@ -126,31 +114,36 @@ class GenerationWorkerUnitTest {
         worker.processPendingJobs();
 
         verify(jobProcessor).process(second);
-        assertThat(availablePermits()).isEqualTo(CONCURRENCY);
     }
 
     @Test
-    void 처리_중에는_permit이_점유되어_있다() {
-        doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
+    void executor가_거부하면_선점을_롤백하고_이번_주기를_중단한다() {
+        Job second = Job.hold(10L, 100L, "dog");
+        ReflectionTestUtils.setField(second, "id", 2L);
+        GenerationWorker rejectingWorker = new GenerationWorker(jobRepository, jobProcessor,
+                task -> { throw new TaskRejectedException("pool exhausted"); },
+                new WorkerProperties(true, 20, CONCURRENCY));
+        doReturn(List.of(job, second)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
-        int[] observed = new int[1];
-        doAnswer(invocation -> {
-            observed[0] = availablePermits();
-            return null;
-        }).when(jobProcessor).process(job);
+
+        rejectingWorker.processPendingJobs();
+
+        verify(jobRepository).transitionIfStatusAndAttemptMatch(
+                eq(1L), eq(JobStatus.HOLDING), eq(JobStatus.PROCESSING), eq(0), any(Instant.class));
+        verify(jobRepository, never()).startProcessingIfAttemptMatches(eq(2L), anyInt(), any(Instant.class));
+    }
+
+    @Test
+    void dispatch에_성공하면_같은_배치의_다음_작업도_처리한다() {
+        Job second = Job.hold(10L, 100L, "dog");
+        ReflectionTestUtils.setField(second, "id", 2L);
+        doReturn(List.of(job, second)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
+        doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
+        doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(2L), eq(0), any(Instant.class));
 
         worker.processPendingJobs();
 
-        assertThat(observed[0]).isEqualTo(CONCURRENCY - 1);
-        assertThat(availablePermits()).isEqualTo(CONCURRENCY);
-    }
-
-    private int availablePermits() {
-        return availablePermits(worker);
-    }
-
-    private int availablePermits(GenerationWorker target) {
-        Semaphore semaphore = (Semaphore) ReflectionTestUtils.getField(target, "availableWorkers");
-        return semaphore.availablePermits();
+        verify(jobProcessor).process(job);
+        verify(jobProcessor).process(second);
     }
 }
