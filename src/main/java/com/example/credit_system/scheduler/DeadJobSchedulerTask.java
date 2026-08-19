@@ -1,4 +1,4 @@
-package com.example.credit_system.global.scheduler;
+package com.example.credit_system.scheduler;
 
 import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.job.domain.Job;

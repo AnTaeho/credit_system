@@ -1,6 +1,7 @@
 package com.example.credit_system.job.stub;
 
 import com.example.credit_system.global.config.AppProperties;
+import com.example.credit_system.global.exception.StubGenerationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

@@ -126,40 +126,40 @@ com.example.credit_system
 ├── CreditSystemApplication.java
 ├── global/
 │   ├── config/
-│   │   └── AppProperties.java       # app.generation / stub / heartbeat / processing 바인딩·검증
+│   │   ├── AppProperties.java       # app.generation / stub / heartbeat / processing 바인딩·검증
+│   │   ├── WorkerProperties.java    # app.worker.* 바인딩·검증
+│   │   └── WorkerExecutorConfig.java # generationWorkerExecutor(큐 없는 bounded pool)
 │   ├── domain/BaseEntity.java       # 공통 엔티티 베이스(감사 필드 등)
-│   ├── exception/                   # GlobalExceptionHandler 등
-│   └── scheduler/
-│       ├── DeadJobSchedulerTask.java  # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
-│       └── HeartbeatRegistry.java    # Redis sorted-set heartbeat
+│   └── exception/                   # GlobalExceptionHandler, StubGenerationException 등
 ├── job/
 │   ├── controller/JobApiController.java
 │   ├── domain/Job.java, JobStatus.java, IdempotencyKey.java
-│   ├── dto/JobCreateRequest.java, JobCreateResponse.java, JobResponse.java
+│   ├── dto/JobCreateRequest.java, JobCreateResponse.java, JobResponse.java, HoldResult.java
 │   ├── repository/JobRepository.java, IdempotencyKeyRepository.java
 │   ├── service/
-│   │   ├── HoldService.java, HoldResult.java   # 요청 접수(hold) 트랜잭션
+│   │   ├── HoldService.java                    # 요청 접수(hold) 트랜잭션
 │   │   ├── ConfirmService.java                 # 성공 확정
 │   │   ├── FailureService.java                 # 실패 전이
 │   │   ├── RetryService.java                   # attempt_no 증가 후 HOLDING 재투입
 │   │   └── RefundService.java                  # 최종 환불(finalRefund)
-│   ├── stub/GenerationStubClient.java, StubGenerationException.java
+│   ├── stub/GenerationStubClient.java
 │   └── worker/
 │       ├── GenerationWorker.java               # DB 큐 폴링 + 조건부 UPDATE 선점
-│       ├── GenerationJobProcessor.java         # 선점된 작업의 외부 호출·결과 반영
-│       ├── WorkerExecutorConfig.java           # generationWorkerExecutor(큐 없는 bounded pool)
-│       └── WorkerProperties.java               # app.worker.* 바인딩·검증
+│       └── GenerationJobProcessor.java         # 선점된 작업의 외부 호출·결과 반영
 ├── ledger/
 │   ├── controller/LedgerApiController.java
 │   ├── domain/LedgerEntry.java, LedgerType.java
 │   ├── dto/LedgerResponse.java
 │   └── repository/LedgerRepository.java
-└── organization/
-    ├── controller/OrganizationApiController.java
-    ├── domain/Organization.java
-    ├── dto/BalanceResponse.java, ChargeRequest.java
-    ├── repository/OrganizationRepository.java  # deductBalance / addBalance 조건부 UPDATE
-    └── service/ChargeService.java
+├── organization/
+│   ├── controller/OrganizationApiController.java
+│   ├── domain/Organization.java
+│   ├── dto/BalanceResponse.java, ChargeRequest.java
+│   ├── repository/OrganizationRepository.java  # deductBalance / addBalance 조건부 UPDATE
+│   └── service/ChargeService.java
+└── scheduler/
+    ├── DeadJobSchedulerTask.java    # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
+    └── HeartbeatRegistry.java       # Redis sorted-set heartbeat
 ```
 
 

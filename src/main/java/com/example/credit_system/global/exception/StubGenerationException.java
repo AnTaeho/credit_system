@@ -1,4 +1,4 @@
-package com.example.credit_system.job.stub;
+package com.example.credit_system.global.exception;
 
 public class StubGenerationException extends RuntimeException {
 

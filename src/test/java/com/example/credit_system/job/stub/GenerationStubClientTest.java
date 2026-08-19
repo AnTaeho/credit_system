@@ -1,6 +1,7 @@
 package com.example.credit_system.job.stub;
 
 import com.example.credit_system.global.config.AppProperties;
+import com.example.credit_system.global.exception.StubGenerationException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

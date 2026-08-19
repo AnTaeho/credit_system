@@ -1,5 +1,6 @@
 package com.example.credit_system.job.worker;
 
+import com.example.credit_system.global.config.WorkerProperties;
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;

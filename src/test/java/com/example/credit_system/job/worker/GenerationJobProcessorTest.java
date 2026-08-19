@@ -1,11 +1,11 @@
 package com.example.credit_system.job.worker;
 
-import com.example.credit_system.global.scheduler.HeartbeatRegistry;
+import com.example.credit_system.scheduler.HeartbeatRegistry;
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.service.ConfirmService;
 import com.example.credit_system.job.service.FailureService;
 import com.example.credit_system.job.stub.GenerationStubClient;
-import com.example.credit_system.job.stub.StubGenerationException;
+import com.example.credit_system.global.exception.StubGenerationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

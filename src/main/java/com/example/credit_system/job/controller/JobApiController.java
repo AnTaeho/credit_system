@@ -4,7 +4,7 @@ import com.example.credit_system.job.dto.JobCreateRequest;
 import com.example.credit_system.job.dto.JobCreateResponse;
 import com.example.credit_system.job.dto.JobResponse;
 import com.example.credit_system.job.repository.JobRepository;
-import com.example.credit_system.job.service.HoldResult;
+import com.example.credit_system.job.dto.HoldResult;
 import com.example.credit_system.job.service.HoldService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;

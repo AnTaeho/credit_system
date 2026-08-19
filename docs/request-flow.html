@@ -649,7 +649,7 @@
         <span class="step-badge">INFRA</span>
       </div>
       <div class="classname">DeadJobSchedulerTask.scan</div>
-      <div class="filepath">global/scheduler/DeadJobSchedulerTask.java · @Scheduled(fixedDelay = app.scheduling.dead-job-scan-interval-millis, 기본 5000ms)</div>
+      <div class="filepath">scheduler/DeadJobSchedulerTask.java · @Scheduled(fixedDelay = app.scheduling.dead-job-scan-interval-millis, 기본 5000ms)</div>
       <div class="step-desc">
         <ul>
           <li><strong>1.</strong> <code>heartbeatRegistry.findExpiredJobIds()</code> → <code>markExpiredAsFailed</code>: heartbeat 만료된 PROCESSING job을 FAILED로 전이 (워커 크래시 회수)</li>

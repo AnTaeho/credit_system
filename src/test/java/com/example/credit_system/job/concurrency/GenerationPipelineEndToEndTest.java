@@ -2,7 +2,7 @@ package com.example.credit_system.job.concurrency;
 
 import com.example.credit_system.job.domain.JobStatus;
 import com.example.credit_system.job.repository.JobRepository;
-import com.example.credit_system.job.service.HoldResult;
+import com.example.credit_system.job.dto.HoldResult;
 import com.example.credit_system.job.service.HoldService;
 import com.example.credit_system.ledger.repository.LedgerRepository;
 import com.example.credit_system.organization.domain.Organization;

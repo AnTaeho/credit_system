@@ -1,4 +1,4 @@
-package com.example.credit_system.job.worker;
+package com.example.credit_system.global.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

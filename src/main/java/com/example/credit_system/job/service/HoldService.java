@@ -6,6 +6,7 @@ import com.example.credit_system.global.exception.InsufficientBalanceException;
 import com.example.credit_system.global.exception.InvalidRequestException;
 import com.example.credit_system.job.domain.IdempotencyKey;
 import com.example.credit_system.job.domain.Job;
+import com.example.credit_system.job.dto.HoldResult;
 import com.example.credit_system.job.repository.IdempotencyKeyRepository;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.ledger.domain.LedgerEntry;

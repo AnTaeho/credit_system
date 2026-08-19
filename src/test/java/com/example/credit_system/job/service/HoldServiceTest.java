@@ -3,6 +3,7 @@ package com.example.credit_system.job.service;
 import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.global.exception.InsufficientBalanceException;
 import com.example.credit_system.global.exception.InvalidRequestException;
+import com.example.credit_system.job.dto.HoldResult;
 import com.example.credit_system.job.repository.IdempotencyKeyRepository;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.ledger.repository.LedgerRepository;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
-import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
