@@ -1,9 +1,5 @@
 package com.example.credit_system.scheduler;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.global.config.WorkerProperties;
 import org.junit.jupiter.api.AfterEach;
@@ -13,18 +9,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -52,8 +43,6 @@ class HeartbeatRegistryTest {
 
     HeartbeatRegistry registry;
     MutableClock clock;
-    Logger registryLogger;
-    ListAppender<ILoggingEvent> logAppender;
 
     @BeforeEach
     void setUp() {
@@ -65,16 +54,10 @@ class HeartbeatRegistryTest {
         clock = new MutableClock(Instant.now());
         WorkerProperties workerProperties = new WorkerProperties(true, 20, 3);
         registry = new HeartbeatRegistry(redisTemplate, appProperties, workerProperties, clock);
-
-        logAppender = new ListAppender<>();
-        logAppender.start();
-        registryLogger = (Logger) LoggerFactory.getLogger(HeartbeatRegistry.class);
-        registryLogger.addAppender(logAppender);
     }
 
     @AfterEach
     void tearDown() {
-        registryLogger.detachAppender(logAppender);
         registry.shutdown();
     }
 
@@ -268,129 +251,10 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void 임계치_전에는_억제_경보를_내지_않는다() {
-        givenRedisFailingOnRemove();
-
-        beginOutage();
-        continueOutage(Duration.ofSeconds(55));
-
-        assertThat(errorLogs()).isEmpty();
-    }
-
-    @Test
-    void 억제가_임계치를_넘기면_ERROR로_경보한다() {
-        givenRedisFailingOnRemove();
-
-        beginOutage();
-        continueOutage(Duration.ofSeconds(60));
-
-        assertThat(errorLogs()).hasSize(1);
-        assertThat(errorLogs().get(0).getFormattedMessage())
-                .contains("60초")
-                .contains("회수가 그동안 계속 억제");
-    }
-
-    @Test
-    void 억제_경보는_임계치_주기로만_재발행된다() {
-        givenRedisFailingOnRemove();
-
-        beginOutage();
-        continueOutage(Duration.ofSeconds(60));
-        assertThat(errorLogs()).hasSize(1);
-
-        continueOutage(Duration.ofSeconds(55));
-        assertThat(errorLogs()).hasSize(1);
-
-        continueOutage(Duration.ofSeconds(5));
-        assertThat(errorLogs()).hasSize(2);
-    }
-
-    @Test
-    void 유예가_풀리면_억제_상태가_리셋되고_회복을_남긴다() {
-        givenRedisFailingOnRemove();
-        when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
-                .thenReturn(Set.of());
-
-        beginOutage();
-        continueOutage(Duration.ofSeconds(60));
-        assertThat(errorLogs()).hasSize(1);
-
-        clock.advance(Duration.ofSeconds(11));
-        assertThat(registry.findExpiredJobIds()).isEmpty();
-        assertThat(infoLogs()).hasSize(1);
-        assertThat(infoLogs().get(0).getFormattedMessage()).contains("회수를 재개");
-
-        beginOutage();
-        continueOutage(Duration.ofSeconds(55));
-        assertThat(errorLogs()).hasSize(1);
-
-        continueOutage(Duration.ofSeconds(5));
-        assertThat(errorLogs()).hasSize(2);
-    }
-
-    @Test
     void heartbeat_스레드_풀은_워커_동시_실행_수만큼_만들어진다() {
         ScheduledThreadPoolExecutor executor =
                 (ScheduledThreadPoolExecutor) ReflectionTestUtils.getField(registry, "executor");
 
         assertThat(executor.getCorePoolSize()).isEqualTo(3);
-    }
-
-    private void givenRedisFailingOnRemove() {
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        when(zSetOperations.remove(eq(KEY), anyString()))
-                .thenThrow(new RedisConnectionFailureException("redis down"));
-    }
-
-    private void beginOutage() {
-        registry.remove(99L);
-    }
-
-    private void continueOutage(Duration duration) {
-        for (long elapsed = 0; elapsed < duration.getSeconds(); elapsed += 5) {
-            clock.advance(Duration.ofSeconds(5));
-            registry.remove(99L);
-            registry.findExpiredJobIds();
-        }
-    }
-
-    private List<ILoggingEvent> errorLogs() {
-        return logsAt(Level.ERROR);
-    }
-
-    private List<ILoggingEvent> infoLogs() {
-        return logsAt(Level.INFO);
-    }
-
-    private List<ILoggingEvent> logsAt(Level level) {
-        return logAppender.list.stream().filter(event -> event.getLevel() == level).toList();
-    }
-
-    static final class MutableClock extends Clock {
-
-        private volatile Instant instant;
-
-        MutableClock(Instant instant) {
-            this.instant = instant;
-        }
-
-        void advance(Duration duration) {
-            this.instant = this.instant.plus(duration);
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return instant;
-        }
     }
 }

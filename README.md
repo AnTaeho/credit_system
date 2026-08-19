@@ -177,6 +177,7 @@ com.example.credit_system
 └── scheduler/
     ├── DeadJobSchedulerTask.java        # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
     ├── HeartbeatRegistry.java           # Redis sorted-set heartbeat
+    ├── RedisOutageGate.java             # Redis 장애 중 회수 억제·유예 판정과 장기 억제 경보
     ├── LedgerReconciliationTask.java    # initial_balance + Σledger = balance 대사, 불일치 시 ERROR 경보
     └── IdempotencyKeyCleanupTask.java   # 보존 기간 지난 idempotency_keys 배치 삭제
 ```
