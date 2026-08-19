@@ -21,7 +21,7 @@
 | 5 | heartbeat 스케줄러 단일 스레드 + Redis 커맨드 타임아웃 미설정 | `HeartbeatRegistry`, `application.yml` | ✅ 완료 (2026-08-19) |
 | 6 | 존재하지 않는 조직 ID → 500 | `OrganizationApiController`, `HoldService`, `ChargeService` | ✅ 완료 (2026-08-19) |
 | 7 | 원장 대사 배치 (`초기잔액 + Σledger = balance` 검증) | `LedgerReconciliationTask` | ✅ 완료 (2026-08-19) |
-| 8 | 멱등키 무한 증가 (TTL·정리 배치 없음) | `idempotency_keys` | **다음 작업** |
+| 8 | 멱등키 무한 증가 (TTL·정리 배치 없음) | `IdempotencyKeyCleanupTask` | ✅ 완료 (2026-08-19) |
 | 9 | 다중 인스턴스 폴링 경합 (`SKIP LOCKED` 미적용) | `GenerationWorker.processPendingJobs` | 로컬 단일 인스턴스라 해당 없음 |
 | 10 | DB 비밀번호 평문 · `ddl-auto: update` · 관측 수단 없음 | `application.yml` | **보류 — 로컬 전용, 의도된 선택** |
 | 11 | 인증 없음 (`X-Organization-Id` 신뢰, `charge`에 결제 없음) | 컨트롤러 4곳 | **보류 — 범위 밖으로 뺀 기능** |

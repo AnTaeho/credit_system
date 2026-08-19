@@ -11,6 +11,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
+
 @Entity
 @Getter
 @Table(name = "idempotency_keys",
@@ -32,8 +34,12 @@ public class IdempotencyKey {
 
     private Long jobId;
 
+    @Column(nullable = false)
+    private Instant createdAt;
+
     public IdempotencyKey(Long organizationId, String idemKey) {
         this.organizationId = organizationId;
         this.idemKey = idemKey;
+        this.createdAt = Instant.now();
     }
 }

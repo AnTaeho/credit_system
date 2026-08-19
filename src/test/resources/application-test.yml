@@ -12,6 +12,8 @@ spring:
 app:
   scheduling:
     enabled: false
+  idempotency:
+    retention-days: 7
   worker:
     enabled: false
     batch-size: 20

@@ -1,11 +1,15 @@
 package com.example.credit_system.job.repository;
 
 import com.example.credit_system.job.domain.IdempotencyKey;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, Long> {
@@ -17,4 +21,12 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
     int attachJobId(@Param("organizationId") Long organizationId,
                     @Param("idemKey") String idemKey,
                     @Param("jobId") Long jobId);
+
+    @Query("SELECT k.id FROM IdempotencyKey k WHERE k.createdAt < :cutoff ORDER BY k.id")
+    List<Long> findIdsCreatedBefore(@Param("cutoff") Instant cutoff, Pageable pageable);
+
+    @Transactional
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM IdempotencyKey k WHERE k.id IN :ids")
+    int deleteByIdIn(@Param("ids") List<Long> ids);
 }

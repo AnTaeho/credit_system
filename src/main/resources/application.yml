@@ -21,12 +21,15 @@ spring:
   task:
     scheduling:
       pool:
-        size: 3
+        size: 4
 
 app:
   scheduling:
     enabled: true
     reconciliation-interval-millis: 60000
+    idempotency-cleanup-interval-millis: 3600000
+  idempotency:
+    retention-days: 7
   worker:
     enabled: true
     batch-size: 20

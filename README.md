@@ -3,7 +3,7 @@
 Organization이 공유하는 크레딧을 선결제/차감하고, 비동기 이미지 생성(stub) 실패 시 정확히 환불하는 것을
 목표로 한 포트폴리오 프로젝트다. 핵심 주장은 "크레딧은 항상 정확하게 차감·환불된다"이며, 이를
 check-then-act 대신 **조건부 UPDATE/INSERT 하나로 확인+실행을 원자화**하는 설계 원칙과 attemptNo
-fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 115건의 테스트로 증명한다.
+fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 119건의 테스트로 증명한다.
 이미지 생성 자체는 관심사가 아니므로 지연+확률적 실패를 가진 `GenerationStubClient`로 대체돼 있다.
 
 ## 1. 프로젝트 개요
@@ -90,8 +90,9 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 - **job**: `id`, `org_id`, `status`(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED), `attempt_no`(fencing
   토큰), `hold_amount`, `updated_at`(heartbeat 용도로도 사용) — 작업 큐를 겸하므로 워커의 배치 폴링
   (status 필터 + id 정렬)을 위해 `idx_jobs_status_id(status, id)` 인덱스를 둔다
-- **idempotency_keys**: `id`, `org_id`, `idem_key`(org_id와 함께 unique), `job_id` — 자체 status 없이
-  job.status를 참조
+- **idempotency_keys**: `id`, `org_id`, `idem_key`(org_id와 함께 unique), `job_id`, `created_at` — 자체
+  status 없이 job.status를 참조. `created_at` 기준으로 `app.idempotency.retention-days`(7일)가 지난
+  행을 `IdempotencyKeyCleanupTask`가 배치로 정리한다
 - **ledger**: `id`, `org_id`, `job_id`, `type`(HOLD/CONFIRM/REFUND/CHARGE), `amount`, `created_at` —
   insert-only, 수정 없음
 
@@ -118,14 +119,22 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
   내부적으로 `SynchronousQueue`를 쓰고, 스레드가 모두 사용 중이면 `execute()`가 즉시 거부한다. 워커는
   이 거부를 신호로 선점한 job을 HOLDING으로 롤백하고 그 주기를 중단하므로, 선점만 해두고 실행되지
   않는 job이 생기지 않는다. `app.worker.batch-size`(20)는 한 폴링 주기의 조회 상한이고,
-  `spring.task.scheduling.pool.size`(3)는 `@Scheduled` 세 개(워커 폴링, `DeadJobSchedulerTask`,
-  `LedgerReconciliationTask`)가 같은 스케줄러 스레드를 두고 경합하지 않게 한다. 두 값은 `WorkerProperties`가
-  기동 시점에 검증한다(1 미만이면 시작 실패)
+  `spring.task.scheduling.pool.size`(4)는 `@Scheduled` 네 개(워커 폴링, `DeadJobSchedulerTask`,
+  `LedgerReconciliationTask`, `IdempotencyKeyCleanupTask`)가 같은 스케줄러 스레드를 두고 경합하지 않게
+  한다. 두 값은 `WorkerProperties`가 기동 시점에 검증한다(1 미만이면 시작 실패)
 - **원장 대사(reconciliation)**: `LedgerReconciliationTask`가 `app.scheduling.reconciliation-interval-millis`
   (60초)마다 모든 조직을 순회하며 `initial_balance + Σledger.amount = balance` 등식을 검증한다. 조직별
   잔액과 원장 합계를 쿼리 하나로 함께 읽어 조회 사이에 커밋되는 트랜잭션으로 인한 오탐을 막는다. 이 배치는
   읽기 전용 관측 장치이며, 불일치를 발견해도 상태를 고치지 않고 `log.error`로 경보만 남긴다 — 실제 교정은
   사람의 조사를 거쳐야 한다는 전제다
+- **멱등키 보존과 정리**: `idempotency_keys`는 요청마다 한 행씩 쌓이고 자체 TTL이 없으므로, 지우지 않으면
+  무한히 자란다. 그렇다고 짧게 지울 수도 없다 — 키가 사라진 뒤 같은 idem_key로 재시도가 들어오면 새 요청으로
+  취급되어 크레딧이 이중 차감된다. 그래서 보존 기간(`app.idempotency.retention-days`, 7일)을 job 수명보다
+  훨씬 길게 잡는다: job은 `app.generation.max-attempts`(3) 안에서 수 초~수 분 내로 종결되므로 7일이면
+  안전 여유가 충분하다. `IdempotencyKeyCleanupTask`가
+  `app.scheduling.idempotency-cleanup-interval-millis`(1시간)마다 `created_at` 기준으로 만료된 행을
+  500건씩 배치로 삭제한다 — 한 번에 전부 지우면 락을 오래 잡으므로 나눠서 지우고, 한 배치가 삭제에
+  실패하면 같은 배치를 무한 재시도하지 않고 그 주기를 중단해 다음 주기에 다시 시도한다
 
 ## 7. 프로젝트 구조
 
@@ -138,6 +147,7 @@ com.example.credit_system
 │   ├── config/
 │   │   ├── AppProperties.java       # app.generation / stub / heartbeat / processing 바인딩·검증
 │   │   ├── WorkerProperties.java    # app.worker.* 바인딩·검증
+│   │   ├── IdempotencyProperties.java # app.idempotency.retention-days 바인딩·검증
 │   │   └── WorkerExecutorConfig.java # generationWorkerExecutor(큐 없는 bounded pool)
 │   ├── domain/BaseEntity.java       # 공통 엔티티 베이스(감사 필드 등)
 │   └── exception/                   # GlobalExceptionHandler, StubGenerationException 등
@@ -167,7 +177,8 @@ com.example.credit_system
 └── scheduler/
     ├── DeadJobSchedulerTask.java        # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
     ├── HeartbeatRegistry.java           # Redis sorted-set heartbeat
-    └── LedgerReconciliationTask.java    # initial_balance + Σledger = balance 대사, 불일치 시 ERROR 경보
+    ├── LedgerReconciliationTask.java    # initial_balance + Σledger = balance 대사, 불일치 시 ERROR 경보
+    └── IdempotencyKeyCleanupTask.java   # 보존 기간 지난 idempotency_keys 배치 삭제
 ```
 
 
