@@ -32,9 +32,6 @@ public class OrganizationApiController {
     @PostMapping("/me/charge")
     public BalanceResponse charge(@RequestHeader("X-Organization-Id") Long organizationId,
                                   @RequestBody ChargeRequest request) {
-        chargeService.charge(organizationId, request.amount());
-        Organization organization = organizationRepository.findById(organizationId)
-                .orElseThrow(() -> new OrganizationNotFoundException(organizationId));
-        return new BalanceResponse(organization.getBalance());
+        return new BalanceResponse(chargeService.charge(organizationId, request.amount()));
     }
 }

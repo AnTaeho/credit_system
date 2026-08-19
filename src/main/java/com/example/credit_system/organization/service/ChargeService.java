@@ -24,7 +24,7 @@ public class ChargeService {
     private final LedgerRepository ledgerRepository;
 
     @Transactional
-    public void charge(Long organizationId, long amount) {
+    public long charge(Long organizationId, long amount) {
         if (amount <= 0) {
             throw new InvalidRequestException("amount는 0보다 커야 합니다.");
         }
@@ -35,7 +35,7 @@ public class ChargeService {
         if (updated == 1) {
             ledgerRepository.save(LedgerEntry.of(organizationId, null, LedgerType.CHARGE, amount));
             log.info("충전 완료: organizationId={}, amount={}", organizationId, amount);
-            return;
+            return organizationRepository.findById(organizationId).orElseThrow().getBalance();
         }
         throw new OrganizationNotFoundException(organizationId);
     }

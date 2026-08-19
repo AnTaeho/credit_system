@@ -32,8 +32,9 @@ class ChargeServiceTest {
     void 충전하면_잔액이_증가하고_ledger에_CHARGE가_남는다() {
         Organization organization = organizationRepository.save(new Organization("acme", 500L));
 
-        chargeService.charge(organization.getId(), 300L);
+        long balance = chargeService.charge(organization.getId(), 300L);
 
+        assertThat(balance).isEqualTo(800L);
         Organization found = organizationRepository.findById(organization.getId()).orElseThrow();
         assertThat(found.getBalance()).isEqualTo(800L);
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId()))

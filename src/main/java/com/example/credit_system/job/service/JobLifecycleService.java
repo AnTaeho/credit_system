@@ -24,15 +24,14 @@ public class JobLifecycleService {
     private final LedgerRepository ledgerRepository;
 
     @Transactional
-    public void confirm(Long jobId, int attemptNo, String resultUrl) {
-        int updated = jobRepository.completeIfAttemptMatches(jobId, resultUrl, attemptNo, Instant.now());
+    public void confirm(Job job, String resultUrl) {
+        int updated = jobRepository.completeIfAttemptMatches(job.getId(), resultUrl, job.getAttemptNo(), Instant.now());
         if (updated == 0) {
-            log.info("이미 무효화된 시도, confirm 무시: jobId={}, attemptNo={}", jobId, attemptNo);
+            log.info("이미 무효화된 시도, confirm 무시: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
             return;
         }
-        Job job = jobRepository.findById(jobId).orElseThrow();
-        ledgerRepository.save(LedgerEntry.of(job.getOrganizationId(), jobId, LedgerType.CONFIRM, 0));
-        log.info("confirm 완료: jobId={}, attemptNo={}", jobId, attemptNo);
+        ledgerRepository.save(LedgerEntry.of(job.getOrganizationId(), job.getId(), LedgerType.CONFIRM, 0));
+        log.info("confirm 완료: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
     }
 
     @Transactional

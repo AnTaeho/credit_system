@@ -589,7 +589,7 @@
           <li>이미 ③에서 PROCESSING으로 선점된 job만 넘어온다. 폴링·선점과 오래 걸리는 외부 호출의 lifecycle을 분리한 클래스</li>
           <li><code>heartbeatRegistry.startHeartbeat(jobId)</code> — Redis sorted set에 ZADD, <code>app.heartbeat.refresh-interval-seconds</code>(5초) 주기 갱신 시작</li>
           <li><code>stubClient.generate(prompt)</code> — 지연 3~7초 + 실패율 30% (<code>app.stub.*</code>)</li>
-          <li>성공 → <code>JobLifecycleService.confirm(jobId, attemptNo, resultUrl)</code> / <code>StubGenerationException</code> → <code>JobLifecycleService.markFailed(jobId, attemptNo)</code></li>
+          <li>성공 → <code>JobLifecycleService.confirm(job, resultUrl)</code> / <code>StubGenerationException</code> → <code>JobLifecycleService.markFailed(jobId, attemptNo)</code></li>
           <li>생성은 됐는데 <strong>결과 반영(confirm)이 실패</strong>하면 200ms 간격으로 최대 3회 재시도. 그래도 실패하면 FAILED로 바꾸지 않고 PROCESSING에 남겨, ⑦의 timeout 회수 경로 한 곳으로 다음 시도를 몰아준다</li>
           <li><code>finally</code> → <code>heartbeatRegistry.stopHeartbeat</code> (가장 바깥에서만 제거해 재시도 중에도 heartbeat가 살아 있게 한다)</li>
         </ul>

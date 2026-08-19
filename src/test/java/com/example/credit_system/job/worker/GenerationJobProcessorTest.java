@@ -46,7 +46,7 @@ class GenerationJobProcessorTest {
 
         processor.runGeneration(job);
 
-        verify(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService).confirm(job, "https://example.test/cat.png");
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 
@@ -57,7 +57,7 @@ class GenerationJobProcessorTest {
         processor.runGeneration(job);
 
         verify(jobLifecycleService).markFailed(1L, 0);
-        verify(jobLifecycleService, never()).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService, never()).confirm(job, "https://example.test/cat.png");
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
 
@@ -66,11 +66,11 @@ class GenerationJobProcessorTest {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");
         doThrow(new IllegalStateException("database unavailable"))
                 .doNothing()
-                .when(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
+                .when(jobLifecycleService).confirm(job, "https://example.test/cat.png");
 
         processor.runGeneration(job);
 
-        verify(jobLifecycleService, times(2)).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService, times(2)).confirm(job, "https://example.test/cat.png");
         verify(jobLifecycleService, never()).markFailed(1L, 0);
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }
@@ -79,11 +79,11 @@ class GenerationJobProcessorTest {
     void 결과_반영_재시도를_모두_소진하면_FAILED로_바꾸지_않고_PROCESSING을_유지한다() {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");
         doThrow(new IllegalStateException("database unavailable"))
-                .when(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
+                .when(jobLifecycleService).confirm(job, "https://example.test/cat.png");
 
         processor.runGeneration(job);
 
-        verify(jobLifecycleService, times(3)).confirm(1L, 0, "https://example.test/cat.png");
+        verify(jobLifecycleService, times(3)).confirm(job, "https://example.test/cat.png");
         verify(jobLifecycleService, never()).markFailed(1L, 0);
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
     }

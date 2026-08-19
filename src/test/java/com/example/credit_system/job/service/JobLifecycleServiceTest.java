@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 
@@ -36,7 +37,7 @@ class JobLifecycleServiceTest {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
         jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
 
-        jobLifecycleService.confirm(job.getId(), 0, "https://stub/x.png");
+        jobLifecycleService.confirm(job, "https://stub/x.png");
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(found.getStatus()).isEqualTo(JobStatus.COMPLETED);
@@ -48,8 +49,9 @@ class JobLifecycleServiceTest {
     void attemptNo가_불일치하면_아무것도_하지_않는다() {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
         jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
+        ReflectionTestUtils.setField(job, "attemptNo", 5);
 
-        jobLifecycleService.confirm(job.getId(), 5, "https://stub/x.png");
+        jobLifecycleService.confirm(job, "https://stub/x.png");
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(found.getStatus()).isEqualTo(JobStatus.PROCESSING);
@@ -64,7 +66,7 @@ class JobLifecycleServiceTest {
         jobRepository.transitionIfStatusAndAttemptMatch(
                 job.getId(), JobStatus.REFUNDED, JobStatus.FAILED, 0, java.time.Instant.now());
 
-        jobLifecycleService.confirm(job.getId(), 0, "https://stub/late.png");
+        jobLifecycleService.confirm(job, "https://stub/late.png");
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(found.getStatus()).isEqualTo(JobStatus.REFUNDED);
@@ -77,8 +79,8 @@ class JobLifecycleServiceTest {
         Job job = jobRepository.save(Job.hold(1L, 100L, "cat"));
         jobRepository.startProcessingIfAttemptMatches(job.getId(), 0, java.time.Instant.now());
 
-        jobLifecycleService.confirm(job.getId(), 0, "https://stub/first.png");
-        jobLifecycleService.confirm(job.getId(), 0, "https://stub/second.png");
+        jobLifecycleService.confirm(job, "https://stub/first.png");
+        jobLifecycleService.confirm(job, "https://stub/second.png");
 
         Job found = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(found.getStatus()).isEqualTo(JobStatus.COMPLETED);

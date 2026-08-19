@@ -49,7 +49,7 @@ public class GenerationJobProcessor {
         RuntimeException lastFailure = null;
         for (int attempt = 1; attempt <= CONFIRM_MAX_ATTEMPTS; attempt++) {
             try {
-                jobLifecycleService.confirm(job.getId(), job.getAttemptNo(), resultUrl);
+                jobLifecycleService.confirm(job, resultUrl);
                 return;
             } catch (RuntimeException e) {
                 lastFailure = e;
