@@ -3,6 +3,7 @@ package com.example.credit_system.job.service;
 import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.global.exception.InsufficientBalanceException;
 import com.example.credit_system.global.exception.InvalidRequestException;
+import com.example.credit_system.global.exception.OrganizationNotFoundException;
 import com.example.credit_system.job.dto.HoldResult;
 import com.example.credit_system.job.repository.IdempotencyKeyRepository;
 import com.example.credit_system.job.repository.JobRepository;
@@ -103,6 +104,18 @@ class HoldServiceTest {
         assertThat(organizationRepository.findById(organization.getId()).orElseThrow().getBalance())
                 .isEqualTo(1000L);
         assertThat(idempotencyKeyRepository.count()).isZero();
+        assertThat(jobRepository.count()).isZero();
+        assertThat(ledgerRepository.count()).isZero();
+    }
+
+    @Test
+    void 존재하지_않는_조직의_생성_요청이면_예외가_발생한다() {
+        Long missingOrganizationId = organization.getId() + 999_999L;
+
+        assertThatThrownBy(() -> holdService.requestGeneration(missingOrganizationId, "key-3", "a cat"))
+                .isInstanceOf(OrganizationNotFoundException.class)
+                .hasMessage("존재하지 않는 organization: " + missingOrganizationId);
+
         assertThat(jobRepository.count()).isZero();
         assertThat(ledgerRepository.count()).isZero();
     }

@@ -4,6 +4,7 @@ import com.example.credit_system.global.config.AppProperties;
 import com.example.credit_system.global.exception.DuplicateRequestInProgressException;
 import com.example.credit_system.global.exception.InsufficientBalanceException;
 import com.example.credit_system.global.exception.InvalidRequestException;
+import com.example.credit_system.global.exception.OrganizationNotFoundException;
 import com.example.credit_system.job.domain.IdempotencyKey;
 import com.example.credit_system.job.domain.Job;
 import com.example.credit_system.job.dto.HoldResult;
@@ -87,7 +88,7 @@ public class HoldService {
         }
 
         Organization organization = organizationRepository.findById(organizationId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 organization: " + organizationId));
+                .orElseThrow(() -> new OrganizationNotFoundException(organizationId));
         throw new InsufficientBalanceException(organization.getBalance(), cost);
     }
 

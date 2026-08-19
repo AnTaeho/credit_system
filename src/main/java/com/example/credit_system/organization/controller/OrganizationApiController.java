@@ -5,6 +5,7 @@ import com.example.credit_system.organization.dto.ChargeRequest;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
 import com.example.credit_system.organization.service.ChargeService;
+import com.example.credit_system.global.exception.OrganizationNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,7 +24,8 @@ public class OrganizationApiController {
 
     @GetMapping("/me/balance")
     public BalanceResponse myBalance(@RequestHeader("X-Organization-Id") Long organizationId) {
-        Organization organization = organizationRepository.findById(organizationId).orElseThrow();
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new OrganizationNotFoundException(organizationId));
         return new BalanceResponse(organization.getBalance());
     }
 
@@ -31,7 +33,8 @@ public class OrganizationApiController {
     public BalanceResponse charge(@RequestHeader("X-Organization-Id") Long organizationId,
                                   @RequestBody ChargeRequest request) {
         chargeService.charge(organizationId, request.amount());
-        Organization organization = organizationRepository.findById(organizationId).orElseThrow();
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new OrganizationNotFoundException(organizationId));
         return new BalanceResponse(organization.getBalance());
     }
 }

@@ -47,4 +47,14 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().code()).isEqualTo("INVALID_REQUEST");
         assertThat(response.getBody().message()).isEqualTo("잘못된 요청");
     }
+
+    @Test
+    void 존재하지_않는_조직_예외는_404와_코드를_반환한다() {
+        ResponseEntity<ErrorResponse> response =
+                handler.handleOrganizationNotFound(new OrganizationNotFoundException(1L));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().code()).isEqualTo("ORGANIZATION_NOT_FOUND");
+        assertThat(response.getBody().message()).isEqualTo("존재하지 않는 organization: 1");
+    }
 }

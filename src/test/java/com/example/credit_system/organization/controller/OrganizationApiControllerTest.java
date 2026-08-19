@@ -59,6 +59,17 @@ class OrganizationApiControllerTest {
         assertThat(after.getBody().balance()).isEqualTo(800L);
     }
 
+    @Test
+    void 존재하지_않는_조직이면_404다() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-Organization-Id", String.valueOf(organization.getId() + 999_999L));
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                url("/api/organizations/me/balance"), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+    }
+
     private String url(String path) {
         return "http://localhost:" + port + path;
     }

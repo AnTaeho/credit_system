@@ -1,6 +1,7 @@
 package com.example.credit_system.organization.service;
 
 import com.example.credit_system.global.exception.InvalidRequestException;
+import com.example.credit_system.global.exception.OrganizationNotFoundException;
 import com.example.credit_system.ledger.repository.LedgerRepository;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
@@ -63,5 +64,15 @@ class ChargeServiceTest {
         assertThat(organizationRepository.findById(organization.getId()).orElseThrow().getBalance())
                 .isEqualTo(500L);
         assertThat(ledgerRepository.findByOrganizationIdOrderByIdDesc(organization.getId())).isEmpty();
+    }
+
+    @Test
+    void 존재하지_않는_조직을_충전하면_예외가_발생한다() {
+        Organization organization = organizationRepository.save(new Organization("acme", 500L));
+        Long missingOrganizationId = organization.getId() + 999_999L;
+
+        assertThatThrownBy(() -> chargeService.charge(missingOrganizationId, 300L))
+                .isInstanceOf(OrganizationNotFoundException.class)
+                .hasMessage("존재하지 않는 organization: " + missingOrganizationId);
     }
 }

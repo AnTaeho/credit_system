@@ -31,6 +31,13 @@ public class GlobalExceptionHandler {
         return conflict("DUPLICATE_IN_PROGRESS", "동일한 요청이 동시에 처리 중입니다. 잠시 후 다시 시도해주세요.");
     }
 
+    @ExceptionHandler(OrganizationNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleOrganizationNotFound(OrganizationNotFoundException e) {
+        log.info("business exception: code=ORGANIZATION_NOT_FOUND, message={}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse("ORGANIZATION_NOT_FOUND", e.getMessage()));
+    }
+
     private ResponseEntity<ErrorResponse> conflict(String code, String message) {
         log.info("business exception: code={}, message={}", code, message);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(code, message));

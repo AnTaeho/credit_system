@@ -16,10 +16,10 @@
 |---|---|---|---|
 | 1 | `scan()` 루프 예외 격리 없음 | `DeadJobSchedulerTask.scan` | ✅ 완료 (2026-08-19) |
 | 2 | FAILED 조회 무페이징 + `process()`의 중복 `findById` | `DeadJobSchedulerTask` | ✅ 완료 (2026-08-19) |
-| 3 | 재시도 백오프 없음 (즉시 HOLDING 복귀) | `JobLifecycleService.retry` | **다음 작업** |
-| 4 | `organizationId` 인덱스 없음 | `JobRepository:78`, `LedgerRepository:10` | 미착수 |
-| 5 | heartbeat 스케줄러 단일 스레드 + Redis 커맨드 타임아웃 미설정 | `HeartbeatRegistry.java:48` | 미착수 |
-| 6 | 존재하지 않는 조직 ID → 500 | `OrganizationApiController:26`, `HoldService.deductBalance`, `ChargeService.charge` | 미착수 |
+| 3 | 재시도 백오프 없음 (즉시 HOLDING 복귀) | `JobLifecycleService.retry` | 하지 않음 — 사용자 판단 |
+| 4 | `organizationId` 인덱스 없음 | `JobRepository`, `LedgerRepository` | 하지 않음 — 사용자 판단 |
+| 5 | heartbeat 스케줄러 단일 스레드 + Redis 커맨드 타임아웃 미설정 | `HeartbeatRegistry` | **다음 작업** |
+| 6 | 존재하지 않는 조직 ID → 500 | `OrganizationApiController`, `HoldService`, `ChargeService` | ✅ 완료 (2026-08-19) |
 | 7 | 원장 대사 배치 (`초기잔액 + Σledger = balance` 검증) | 신규 | 미착수 |
 | 8 | 멱등키 무한 증가 (TTL·정리 배치 없음) | `idempotency_keys` | 미착수 |
 | 9 | 다중 인스턴스 폴링 경합 (`SKIP LOCKED` 미적용) | `GenerationWorker.processPendingJobs` | 로컬 단일 인스턴스라 해당 없음 |

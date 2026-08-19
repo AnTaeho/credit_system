@@ -1,6 +1,7 @@
 package com.example.credit_system.organization.service;
 
 import com.example.credit_system.global.exception.InvalidRequestException;
+import com.example.credit_system.global.exception.OrganizationNotFoundException;
 import com.example.credit_system.ledger.domain.LedgerEntry;
 import com.example.credit_system.ledger.domain.LedgerType;
 import com.example.credit_system.ledger.repository.LedgerRepository;
@@ -36,6 +37,6 @@ public class ChargeService {
             log.info("충전 완료: organizationId={}, amount={}", organizationId, amount);
             return;
         }
-        throw new IllegalArgumentException("존재하지 않는 organization: " + organizationId);
+        throw new OrganizationNotFoundException(organizationId);
     }
 }
