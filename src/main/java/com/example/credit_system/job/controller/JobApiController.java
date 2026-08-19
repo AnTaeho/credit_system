@@ -1,7 +1,6 @@
 package com.example.credit_system.job.controller;
 
 import com.example.credit_system.job.dto.JobCreateRequest;
-import com.example.credit_system.job.dto.JobCreateResponse;
 import com.example.credit_system.job.dto.JobResponse;
 import com.example.credit_system.job.repository.JobRepository;
 import com.example.credit_system.job.dto.HoldResult;
@@ -25,10 +24,9 @@ public class JobApiController {
     private final JobRepository jobRepository;
 
     @PostMapping
-    public JobCreateResponse create(@RequestHeader("X-Organization-Id") Long organizationId,
-                                    @RequestBody JobCreateRequest request) {
-        HoldResult result = holdService.requestGeneration(organizationId, request.idemKey(), request.prompt());
-        return new JobCreateResponse(result.jobId(), result.duplicate());
+    public HoldResult create(@RequestHeader("X-Organization-Id") Long organizationId,
+                             @RequestBody JobCreateRequest request) {
+        return holdService.requestGeneration(organizationId, request.idemKey(), request.prompt());
     }
 
     @GetMapping

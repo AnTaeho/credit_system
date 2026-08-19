@@ -1,7 +1,7 @@
 package com.example.credit_system.job.controller;
 
+import com.example.credit_system.job.dto.HoldResult;
 import com.example.credit_system.job.dto.JobCreateRequest;
-import com.example.credit_system.job.dto.JobCreateResponse;
 import com.example.credit_system.job.dto.JobResponse;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
@@ -64,10 +64,10 @@ class JobApiControllerTest {
         headers.add("X-Organization-Id", String.valueOf(organization.getId()));
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        ResponseEntity<JobCreateResponse> createResponse = restTemplate.exchange(
+        ResponseEntity<HoldResult> createResponse = restTemplate.exchange(
                 url("/api/jobs"), HttpMethod.POST,
                 new HttpEntity<>(new JobCreateRequest("idem-1", "a cat"), headers),
-                JobCreateResponse.class);
+                HoldResult.class);
 
         assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(createResponse.getBody().duplicate()).isFalse();

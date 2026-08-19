@@ -154,7 +154,7 @@ com.example.credit_system
 ├── job/
 │   ├── controller/JobApiController.java
 │   ├── domain/Job.java, JobStatus.java, IdempotencyKey.java
-│   ├── dto/JobCreateRequest.java, JobCreateResponse.java, JobResponse.java, HoldResult.java
+│   ├── dto/JobCreateRequest.java, JobResponse.java, HoldResult.java
 │   ├── repository/JobRepository.java, IdempotencyKeyRepository.java
 │   ├── service/
 │   │   ├── HoldService.java                    # 요청 접수(hold) 트랜잭션

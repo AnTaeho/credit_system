@@ -521,7 +521,7 @@
         </div>
         <p style="font-size:0.8rem; color:var(--text-dim); margin:0 0 14px;">
           여기까지가 하나의 DB 트랜잭션. 작업 큐가 같은 DB의 <code>jobs</code> 테이블이므로, 커밋되면 잔액 차감과 큐 투입(status=HOLDING)이 원자적으로 함께 확정된다. 별도 브로커로의 이중 쓰기가 없다.
-          응답: <code>JobCreateResponse(jobId, duplicate)</code> — 200. 클라이언트는 이 시점에 바로 응답을 받는다 (비동기).
+          응답: <code>HoldResult(jobId, duplicate)</code> — 200. 클라이언트는 이 시점에 바로 응답을 받는다 (비동기).
         </p>
       </div>
     </div>
