@@ -3,7 +3,7 @@
 Organization이 공유하는 크레딧을 선결제/차감하고, 비동기 이미지 생성(stub) 실패 시 정확히 환불하는 것을
 목표로 한 포트폴리오 프로젝트다. 핵심 주장은 "크레딧은 항상 정확하게 차감·환불된다"이며, 이를
 check-then-act 대신 **조건부 UPDATE/INSERT 하나로 확인+실행을 원자화**하는 설계 원칙과 attemptNo
-fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 110건의 테스트로 증명한다.
+fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 115건의 테스트로 증명한다.
 이미지 생성 자체는 관심사가 아니므로 지연+확률적 실패를 가진 `GenerationStubClient`로 대체돼 있다.
 
 ## 1. 프로젝트 개요
@@ -84,7 +84,9 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 
 4개 테이블로 구성된다.
 
-- **organization**: `id`, `balance`, `updated_at` — 잔액을 이 컬럼으로 직접 관리
+- **organization**: `id`, `balance`, `initial_balance`, `updated_at` — 잔액을 `balance` 컬럼으로 직접
+  관리하되, `initial_balance + Σledger.amount = balance` 등식을 `LedgerReconciliationTask`가 주기적으로
+  대사해 검증한다
 - **job**: `id`, `org_id`, `status`(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED), `attempt_no`(fencing
   토큰), `hold_amount`, `updated_at`(heartbeat 용도로도 사용) — 작업 큐를 겸하므로 워커의 배치 폴링
   (status 필터 + id 정렬)을 위해 `idx_jobs_status_id(status, id)` 인덱스를 둔다
@@ -116,9 +118,14 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
   내부적으로 `SynchronousQueue`를 쓰고, 스레드가 모두 사용 중이면 `execute()`가 즉시 거부한다. 워커는
   이 거부를 신호로 선점한 job을 HOLDING으로 롤백하고 그 주기를 중단하므로, 선점만 해두고 실행되지
   않는 job이 생기지 않는다. `app.worker.batch-size`(20)는 한 폴링 주기의 조회 상한이고,
-  `spring.task.scheduling.pool.size`(2)는 워커 폴링과
-  `DeadJobSchedulerTask`가 같은 스케줄러 스레드를 두고 경합하지 않게 한다. 두 값은 `WorkerProperties`가
+  `spring.task.scheduling.pool.size`(3)는 `@Scheduled` 세 개(워커 폴링, `DeadJobSchedulerTask`,
+  `LedgerReconciliationTask`)가 같은 스케줄러 스레드를 두고 경합하지 않게 한다. 두 값은 `WorkerProperties`가
   기동 시점에 검증한다(1 미만이면 시작 실패)
+- **원장 대사(reconciliation)**: `LedgerReconciliationTask`가 `app.scheduling.reconciliation-interval-millis`
+  (60초)마다 모든 조직을 순회하며 `initial_balance + Σledger.amount = balance` 등식을 검증한다. 조직별
+  잔액과 원장 합계를 쿼리 하나로 함께 읽어 조회 사이에 커밋되는 트랜잭션으로 인한 오탐을 막는다. 이 배치는
+  읽기 전용 관측 장치이며, 불일치를 발견해도 상태를 고치지 않고 `log.error`로 경보만 남긴다 — 실제 교정은
+  사람의 조사를 거쳐야 한다는 전제다
 
 ## 7. 프로젝트 구조
 
@@ -149,8 +156,8 @@ com.example.credit_system
 ├── ledger/
 │   ├── controller/LedgerApiController.java
 │   ├── domain/LedgerEntry.java, LedgerType.java
-│   ├── dto/LedgerResponse.java
-│   └── repository/LedgerRepository.java
+│   ├── dto/LedgerBalanceCheck.java, LedgerResponse.java
+│   └── repository/LedgerRepository.java   # 조직별 잔액·원장 합계를 한 쿼리로 묶는 findBalanceChecks
 ├── organization/
 │   ├── controller/OrganizationApiController.java
 │   ├── domain/Organization.java
@@ -158,8 +165,9 @@ com.example.credit_system
 │   ├── repository/OrganizationRepository.java  # deductBalance / addBalance 조건부 UPDATE
 │   └── service/ChargeService.java
 └── scheduler/
-    ├── DeadJobSchedulerTask.java    # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
-    └── HeartbeatRegistry.java       # Redis sorted-set heartbeat
+    ├── DeadJobSchedulerTask.java        # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
+    ├── HeartbeatRegistry.java           # Redis sorted-set heartbeat
+    └── LedgerReconciliationTask.java    # initial_balance + Σledger = balance 대사, 불일치 시 ERROR 경보
 ```
 
 

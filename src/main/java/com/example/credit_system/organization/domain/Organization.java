@@ -27,8 +27,12 @@ public class Organization extends BaseEntity {
     @Column(nullable = false)
     private long balance;
 
+    @Column(nullable = false)
+    private long initialBalance;
+
     public Organization(String name, long balance) {
         this.name = name;
         this.balance = balance;
+        this.initialBalance = balance;
     }
 }
