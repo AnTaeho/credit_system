@@ -3,13 +3,13 @@
 Organization이 공유하는 크레딧을 선결제/차감하고, 비동기 이미지 생성(stub) 실패 시 정확히 환불하는 것을
 목표로 한 포트폴리오 프로젝트다. 핵심 주장은 "크레딧은 항상 정확하게 차감·환불된다"이며, 이를
 check-then-act 대신 **조건부 UPDATE/INSERT 하나로 확인+실행을 원자화**하는 설계 원칙과 attemptNo
-fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트(총 58건)로 증명한다.
+fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 100건의 테스트로 증명한다.
 이미지 생성 자체는 관심사가 아니므로 지연+확률적 실패를 가진 `GenerationStubClient`로 대체돼 있다.
 
 ## 1. 프로젝트 개요
 
 **요구사항**
-- 여러 Organization, 각 Organization에 여러 사용자, 사용자는 소속 Organization의 크레딧 잔액을 공유
+- 여러 Organization이 존재하며, 각 Organization은 크레딧 잔액을 조직 단위로 공유
 - 크레딧은 선결제, 이미지 생성 시 차감, 잔액 부족 시 생성 시작 불가
 - 이미지 생성은 비동기, 실패 시 사용된 크레딧 환불
 - 동일 요청이 네트워크 이슈로 중복 전송될 수 있음(멱등성 필요)
@@ -21,18 +21,11 @@ fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트(총 5
 이미지 생성 로직 자체의 품질은 이 프로젝트의 검증 대상이 아니며, 그 결과를 크레딧 시스템이 정확히
 반영하는지만 검증한다.
 
-데모 계정 (최초 기동 시 `DataSeeder`가 자동 생성):
-
-| username | password | organization | 초기 잔액 |
-|---|---|---|---|
-| alice | password123 | Acme Corp | 10,000 |
-| bob | password123 | Globex Inc | 5,000 |
-
-`/login`으로 로그인하면 `/dashboard`에서 잔액 확인, 충전, 이미지 생성 요청, job 상태(3초 폴링), ledger 내역을 볼 수 있습니다.
+API는 HTTP 헤더 `X-Organization-Id`로 조직을 식별한다. 웹 UI와 인증은 이 프로젝트의 범위 밖이다.
 
 ## 2. 기술 스택
 
-Spring Boot 4.1 (Java 17) / Spring Data JPA / Spring Data Redis / Thymeleaf / MySQL /
+Spring Boot 4.1 (Java 17) / Spring Data JPA / Spring Data Redis / MySQL /
 H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 
 ## 3. 아키텍처와 처리 흐름
@@ -89,10 +82,9 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 
 ## 5. 데이터 모델
 
-5개 테이블로 구성된다.
+4개 테이블로 구성된다.
 
 - **organization**: `id`, `balance`, `updated_at` — 잔액을 이 컬럼으로 직접 관리
-- **users**: `id`, `org_id`, `username`, `password`, `created_at` — 조직에 속한 사용자
 - **job**: `id`, `org_id`, `status`(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED), `attempt_no`(fencing
   토큰), `hold_amount`, `updated_at`(heartbeat 용도로도 사용) — 작업 큐를 겸하므로 워커의 배치 폴링
   (status 필터 + id 정렬)을 위해 `idx_jobs_status_id(status, id)` 인덱스를 둔다
@@ -132,19 +124,9 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 ```
 com.example.credit_system
 ├── CreditSystemApplication.java
-├── auth/                            # 로그인/세션 인증
-│   ├── controller/LoginController.java
-│   ├── domain/User.java
-│   └── repository/UserRepository.java
-├── dashboard/
-│   └── DashboardController.java     # 잔액/충전/생성요청/폴링/ledger 뷰
 ├── global/
-│   ├── auth/                        # LoginInterceptor, SessionConst
 │   ├── config/
-│   │   ├── AppProperties.java       # app.generation / stub / heartbeat / processing 바인딩·검증
-│   │   ├── DataSeeder.java          # alice/bob 데모 계정 시딩
-│   │   ├── PasswordEncoderConfig.java
-│   │   └── WebConfig.java
+│   │   └── AppProperties.java       # app.generation / stub / heartbeat / processing 바인딩·검증
 │   ├── domain/BaseEntity.java       # 공통 엔티티 베이스(감사 필드 등)
 │   ├── exception/                   # GlobalExceptionHandler 등
 │   └── scheduler/

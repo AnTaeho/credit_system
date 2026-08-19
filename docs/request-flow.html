@@ -459,13 +459,13 @@
         <span class="step-title">① 요청 진입</span>
         <span class="step-badge">SYNC</span>
       </div>
-      <div class="classname">LoginInterceptor.preHandle → JobApiController.create</div>
-      <div class="filepath">global/auth/LoginInterceptor.java · job/controller/JobApiController.java</div>
+      <div class="classname">JobApiController.create</div>
+      <div class="filepath">job/controller/JobApiController.java</div>
       <div class="step-desc">
         <ul>
-          <li>브라우저 대시보드(<code>templates/dashboard.html</code>)에서 <code>POST /api/jobs</code> 호출, body = <code>{idemKey, prompt}</code></li>
-          <li><code>LoginInterceptor</code>: HttpSession에서 ORGANIZATION_ID 확인. 없으면 <code>/api/**</code>는 401, 그 외는 <code>/login</code> 리다이렉트. 있으면 organizationId/userId/username을 request attribute로 전달</li>
-          <li><code>JobApiController.create</code>: <code>@RequestAttribute(ORGANIZATION_ID)</code> 로 조직 식별 → <code>HoldService.requestGeneration(organizationId, idemKey, prompt)</code> 호출</li>
+          <li>클라이언트가 <code>X-Organization-Id</code> 헤더와 함께 <code>POST /api/jobs</code> 호출, body = <code>{idemKey, prompt}</code></li>
+          <li>별도의 인증·세션 계층 없이 <code>X-Organization-Id</code> 요청 헤더로 조직을 식별한다(포트폴리오 범위 밖)</li>
+          <li><code>JobApiController.create</code>: <code>@RequestHeader("X-Organization-Id")</code> 로 조직 식별 → <code>HoldService.requestGeneration(organizationId, idemKey, prompt)</code> 호출</li>
         </ul>
       </div>
     </div>

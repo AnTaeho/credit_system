@@ -16,8 +16,6 @@ app:
     enabled: false
     batch-size: 20
     concurrency: 3
-  seed:
-    enabled: false
   generation:
     cost: 100
     max-attempts: 3
