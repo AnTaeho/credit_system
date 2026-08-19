@@ -3,7 +3,7 @@
 Organization이 공유하는 크레딧을 선결제/차감하고, 비동기 이미지 생성(stub) 실패 시 정확히 환불하는 것을
 목표로 한 포트폴리오 프로젝트다. 핵심 주장은 "크레딧은 항상 정확하게 차감·환불된다"이며, 이를
 check-then-act 대신 **조건부 UPDATE/INSERT 하나로 확인+실행을 원자화**하는 설계 원칙과 attemptNo
-fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 109건의 테스트로 증명한다.
+fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 110건의 테스트로 증명한다.
 이미지 생성 자체는 관심사가 아니므로 지연+확률적 실패를 가진 `GenerationStubClient`로 대체돼 있다.
 
 ## 1. 프로젝트 개요
@@ -106,10 +106,11 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 - **`reapStaleProcessing`**: `app.processing.timeout-seconds`(60초) 초과했는데 살아있는 heartbeat가
   없는 PROCESSING job을 FAILED로 회수 — Redis 장애, 선점 직후 executor 위임 실패와 롤백 실패, heartbeat
   등록 전 워커 크래시, 결과 반영(confirm) 재시도 소진을 모두 커버
-- **Heartbeat**: Redis sorted set에 워커가 실제 실행을 시작하는 시점(`GenerationJobProcessor.process`)에
-  등록하고 `app.heartbeat.refresh-interval-seconds`(5초)마다 갱신 — job 수와 무관하게 O(1) 조회로 마감
-  지난 job만 스캔. Redis 장애 중에는 회수를 억제하되, 억제가
-  `app.heartbeat.suppression-alert-seconds`(60초)를 넘기면 ERROR로 경보한다
+- **Heartbeat**: Redis sorted set에 워커가 실제 실행을 시작하는 시점(`GenerationJobProcessor.process`)에 등록하고
+  `app.heartbeat.refresh-interval-seconds`(5초)마다 갱신 — job 수와 무관하게 O(1) 조회로 마감 지난 job만
+  스캔. Redis 장애 중에는 회수를 억제하되, 억제가 `app.heartbeat.suppression-alert-seconds`(60초)를 넘기면
+  ERROR로 경보한다. `spring.data.redis.timeout`(2초)으로 Redis 커맨드 타임아웃을 짧게 잡아, 느려진 Redis가
+  heartbeat 만료(10초) 전에 확실히 예외로 드러나게 하므로 억제 로직이 제때 작동한다
 - **워커 동시 실행 상한**: `app.worker.concurrency`(3)가 전용 executor(`generationWorkerExecutor`)의
   스레드 수를 단독으로 결정한다 — executor 내부 큐 용량은 0이라 Spring의 `ThreadPoolTaskExecutor`는
   내부적으로 `SynchronousQueue`를 쓰고, 스레드가 모두 사용 중이면 `execute()`가 즉시 거부한다. 워커는

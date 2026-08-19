@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.example.credit_system.global.config.AppProperties;
+import com.example.credit_system.global.config.WorkerProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -25,6 +27,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -60,7 +63,8 @@ class HeartbeatRegistryTest {
                 new AppProperties.Heartbeat(10, 1, 60),
                 new AppProperties.Processing(60));
         clock = new MutableClock(Instant.now());
-        registry = new HeartbeatRegistry(redisTemplate, appProperties, clock);
+        WorkerProperties workerProperties = new WorkerProperties(true, 20, 3);
+        registry = new HeartbeatRegistry(redisTemplate, appProperties, workerProperties, clock);
 
         logAppender = new ListAppender<>();
         logAppender.start();
@@ -322,6 +326,14 @@ class HeartbeatRegistryTest {
 
         continueOutage(Duration.ofSeconds(5));
         assertThat(errorLogs()).hasSize(2);
+    }
+
+    @Test
+    void heartbeat_스레드_풀은_워커_동시_실행_수만큼_만들어진다() {
+        ScheduledThreadPoolExecutor executor =
+                (ScheduledThreadPoolExecutor) ReflectionTestUtils.getField(registry, "executor");
+
+        assertThat(executor.getCorePoolSize()).isEqualTo(3);
     }
 
     private void givenRedisFailingOnRemove() {

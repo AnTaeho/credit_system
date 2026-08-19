@@ -1,6 +1,7 @@
 package com.example.credit_system.scheduler;
 
 import com.example.credit_system.global.config.AppProperties;
+import com.example.credit_system.global.config.WorkerProperties;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,14 +39,19 @@ public class HeartbeatRegistry {
     private final AtomicReference<Instant> lastSuppressionAlertAt = new AtomicReference<>(NONE);
 
     @Autowired
-    public HeartbeatRegistry(StringRedisTemplate redisTemplate, AppProperties appProperties) {
-        this(redisTemplate, appProperties, Clock.systemUTC());
+    public HeartbeatRegistry(StringRedisTemplate redisTemplate,
+                             AppProperties appProperties,
+                             WorkerProperties workerProperties) {
+        this(redisTemplate, appProperties, workerProperties, Clock.systemUTC());
     }
 
-    HeartbeatRegistry(StringRedisTemplate redisTemplate, AppProperties appProperties, Clock clock) {
+    HeartbeatRegistry(StringRedisTemplate redisTemplate,
+                      AppProperties appProperties,
+                      WorkerProperties workerProperties,
+                      Clock clock) {
         this.redisTemplate = redisTemplate;
         this.appProperties = appProperties;
-        this.executor = Executors.newScheduledThreadPool(1);
+        this.executor = Executors.newScheduledThreadPool(workerProperties.concurrency());
         this.clock = clock;
     }
 
