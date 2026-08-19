@@ -44,7 +44,7 @@ class GenerationJobProcessorTest {
     void 성공하면_confirm하고_heartbeat를_정리한다() {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");
 
-        processor.process(job);
+        processor.runGeneration(job);
 
         verify(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
         verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
@@ -54,7 +54,7 @@ class GenerationJobProcessorTest {
     void 생성_실패는_FAILED로_기록하고_heartbeat를_정리한다() {
         when(stubClient.generate("cat")).thenThrow(new StubGenerationException("cat"));
 
-        processor.process(job);
+        processor.runGeneration(job);
 
         verify(jobLifecycleService).markFailed(1L, 0);
         verify(jobLifecycleService, never()).confirm(1L, 0, "https://example.test/cat.png");
@@ -68,7 +68,7 @@ class GenerationJobProcessorTest {
                 .doNothing()
                 .when(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
 
-        processor.process(job);
+        processor.runGeneration(job);
 
         verify(jobLifecycleService, times(2)).confirm(1L, 0, "https://example.test/cat.png");
         verify(jobLifecycleService, never()).markFailed(1L, 0);
@@ -81,7 +81,7 @@ class GenerationJobProcessorTest {
         doThrow(new IllegalStateException("database unavailable"))
                 .when(jobLifecycleService).confirm(1L, 0, "https://example.test/cat.png");
 
-        processor.process(job);
+        processor.runGeneration(job);
 
         verify(jobLifecycleService, times(3)).confirm(1L, 0, "https://example.test/cat.png");
         verify(jobLifecycleService, never()).markFailed(1L, 0);

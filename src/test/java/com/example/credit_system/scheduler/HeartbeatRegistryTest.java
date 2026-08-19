@@ -62,7 +62,7 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void touch가_Redis_예외를_삼키고_갱신_스레드를_죽이지_않는다() {
+    void refreshHeartbeat가_Redis_예외를_삼키고_갱신_스레드를_죽이지_않는다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.add(anyString(), anyString(), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
@@ -93,16 +93,16 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void remove는_Redis_예외를_삼킨다() {
+    void removeHeartbeat는_Redis_예외를_삼킨다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.remove(KEY, "7"))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
 
-        assertThatCode(() -> registry.remove(7L)).doesNotThrowAnyException();
+        assertThatCode(() -> registry.removeHeartbeat(7L)).doesNotThrowAnyException();
     }
 
     @Test
-    void stopHeartbeat은_remove가_Redis_예외를_던져도_전파하지_않는다() {
+    void stopHeartbeat은_removeHeartbeat가_Redis_예외를_던져도_전파하지_않는다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.add(anyString(), anyString(), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
@@ -116,7 +116,7 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void 정상_상황에서_touch는_now에_timeout을_더한_score로_기록한다() {
+    void 정상_상황에서_refreshHeartbeat는_now에_timeout을_더한_score로_기록한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         long before = Instant.now().getEpochSecond();
 
@@ -150,11 +150,11 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void 정상_상황에서_remove는_ZSET_멤버를_제거한다() {
+    void 정상_상황에서_removeHeartbeat는_ZSET_멤버를_제거한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.remove(KEY, "16")).thenReturn(1L);
 
-        registry.remove(16L);
+        registry.removeHeartbeat(16L);
 
         verify(zSetOperations).remove(KEY, "16");
     }
@@ -194,7 +194,7 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void 유예_구간에도_touch는_계속_시도한다() {
+    void 유예_구간에도_refreshHeartbeat는_계속_시도한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
@@ -209,7 +209,7 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void 유예_구간에도_remove는_계속_시도한다() {
+    void 유예_구간에도_removeHeartbeat는_계속_시도한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
@@ -217,13 +217,13 @@ class HeartbeatRegistryTest {
         registry.findExpiredJobIds();
         clock.advance(Duration.ofSeconds(1));
 
-        registry.remove(42L);
+        registry.removeHeartbeat(42L);
 
         verify(zSetOperations).remove(KEY, "42");
     }
 
     @Test
-    void touch_실패가_findExpiredJobIds_회수를_보류시킨다() {
+    void refreshHeartbeat_실패가_findExpiredJobIds_회수를_보류시킨다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.add(anyString(), anyString(), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("redis down"));

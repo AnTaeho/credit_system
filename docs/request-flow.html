@@ -534,10 +534,10 @@
     <!-- STEP 3 -->
     <div class="step" data-path="infra">
       <div class="step-head">
-        <span class="step-title">③ GenerationWorker.processPendingJobs (폴링, 기본 500ms)</span>
+        <span class="step-title">③ GenerationWorker.dispatchPendingJobs (폴링, 기본 500ms)</span>
         <span class="step-badge">INFRA</span>
       </div>
-      <div class="classname">GenerationWorker.processPendingJobs</div>
+      <div class="classname">GenerationWorker.dispatchPendingJobs</div>
       <div class="filepath">job/worker/GenerationWorker.java · @ConditionalOnExpression(app.scheduling.enabled and app.worker.enabled)</div>
       <div class="step-desc">
         <ul>
@@ -579,10 +579,10 @@
     <!-- STEP 5 -->
     <div class="step" data-path="infra">
       <div class="step-head">
-        <span class="step-title">⑤ GenerationJobProcessor.process (워커 스레드)</span>
+        <span class="step-title">⑤ GenerationJobProcessor.runGeneration (워커 스레드)</span>
         <span class="step-badge">INFRA</span>
       </div>
-      <div class="classname">GenerationJobProcessor.process</div>
+      <div class="classname">GenerationJobProcessor.runGeneration</div>
       <div class="filepath">job/worker/GenerationJobProcessor.java</div>
       <div class="step-desc">
         <ul>
@@ -653,8 +653,8 @@
       <div class="step-desc">
         <ul>
           <li><strong>1.</strong> <code>heartbeatRegistry.findExpiredJobIds()</code> → <code>markExpiredJobsAsFailed()</code>: heartbeat 만료된 PROCESSING job을 FAILED로 전이 (워커 크래시 회수)</li>
-          <li><strong>2.</strong> <code>reapStaleProcessing()</code>: <code>app.processing.timeout-seconds</code>(60초) 넘은 PROCESSING job 중 <strong>살아있는 heartbeat가 없는 것만</strong> FAILED로 회수 (Redis 장애 / 선점 직후 위임·롤백 실패 / heartbeat 등록 전 크래시 / ⑤의 confirm 재시도 소진을 모두 커버)</li>
-          <li><strong>3.</strong> <code>processFailedJobs()</code>: 모든 FAILED job에 대해 조회 시점 스냅샷의 <code>attempt_no + 1 &lt; app.generation.max-attempts(3)</code> 이면 <code>JobLifecycleService.retry</code>, 아니면 <code>JobLifecycleService.finalRefund</code></li>
+          <li><strong>2.</strong> <code>markStalledJobsAsFailed()</code>: <code>app.processing.timeout-seconds</code>(60초) 넘은 PROCESSING job 중 <strong>살아있는 heartbeat가 없는 것만</strong> FAILED로 회수 (Redis 장애 / 선점 직후 위임·롤백 실패 / heartbeat 등록 전 크래시 / ⑤의 confirm 재시도 소진을 모두 커버)</li>
+          <li><strong>3.</strong> <code>retryOrRefundFailedJobs()</code>: 모든 FAILED job에 대해 조회 시점 스냅샷의 <code>attempt_no + 1 &lt; app.generation.max-attempts(3)</code> 이면 <code>JobLifecycleService.retry</code>, 아니면 <code>JobLifecycleService.finalRefund</code></li>
           <li>HOLDING은 <strong>회수 대상이 아니다.</strong> 발행 실패 상태가 아니라 정상적인 큐 대기 상태이므로 경과 시간만으로 실패 처리하지 않고, 워커가 멈춰 있던 동안 쌓인 job은 재기동 후 ③에서 그대로 처리된다</li>
         </ul>
       </div>
@@ -869,7 +869,7 @@ WHERE id = ? AND status = 'FAILED' AND attempt_no = ?</pre></td>
       </div>
     </div>
     <div class="tl-row">
-      <div class="tl-step-label">③ GenerationWorker<br><span style="color:var(--text-faint); font-weight:400;">processPendingJobs</span></div>
+      <div class="tl-step-label">③ GenerationWorker<br><span style="color:var(--text-faint); font-weight:400;">dispatchPendingJobs</span></div>
       <div class="tl-tables">
         <span class="tl-chip"><span class="op op-read">READ</span>job (HOLDING, batch-size)</span>
         <span class="tl-chip"><span class="op op-update">UPDATE</span>job.status → PROCESSING</span>

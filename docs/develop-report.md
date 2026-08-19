@@ -22,13 +22,13 @@
 | 6 | 존재하지 않는 조직 ID → 500 | `OrganizationApiController`, `HoldService`, `ChargeService` | ✅ 완료 (2026-08-19) |
 | 7 | 원장 대사 배치 (`초기잔액 + Σledger = balance` 검증) | `LedgerReconciliationTask` | ✅ 완료 (2026-08-19) |
 | 8 | 멱등키 무한 증가 (TTL·정리 배치 없음) | `IdempotencyKeyCleanupTask` | ✅ 완료 (2026-08-19) |
-| 9 | 다중 인스턴스 폴링 경합 (`SKIP LOCKED` 미적용) | `GenerationWorker.processPendingJobs` | 로컬 단일 인스턴스라 해당 없음 |
+| 9 | 다중 인스턴스 폴링 경합 (`SKIP LOCKED` 미적용) | `GenerationWorker.dispatchPendingJobs` | 로컬 단일 인스턴스라 해당 없음 |
 | 10 | DB 비밀번호 평문 · `ddl-auto: update` · 관측 수단 없음 | `application.yml` | **보류 — 로컬 전용, 의도된 선택** |
 | 11 | 인증 없음 (`X-Organization-Id` 신뢰, `charge`에 결제 없음) | 컨트롤러 4곳 | **보류 — 범위 밖으로 뺀 기능** |
 
 ## 완료: `scan()` 예외 격리 (2026-08-19)
 
-**문제였던 것**: `DeadJobSchedulerTask.scan()`의 세 구간(heartbeat 만료 루프 / `reapStaleProcessing` /
+**문제였던 것**: `DeadJobSchedulerTask.scan()`의 세 구간(heartbeat 만료 루프 / `markStalledJobsAsFailed` /
 FAILED 처리 루프)에 try/catch가 하나도 없었다. job 하나에서 예외가 나면 `scan()` 전체가 중단되고,
 id 순서상 뒤에 있던 job은 그 주기에 처리되지 않았다.
 
@@ -38,7 +38,7 @@ id 순서상 뒤에 있던 job은 그 주기에 처리되지 않았다.
 - 원인이 지속되면 매 주기 같은 자리에서 멈추므로 그 뒤 job은 **영구히 환불되지 않는다.** "환불 유실을
   허용하지 않는다"는 불변식이 깨지는 경로다.
 
-`GenerationWorker.processPendingJobs`는 이미 per-job try/catch + `continue`로 이 문제를 해결해 뒀고
+`GenerationWorker.dispatchPendingJobs`는 이미 per-job try/catch + `continue`로 이 문제를 해결해 뒀고
 `한_작업의_선점_실패가_같은_배치의_나머지_작업을_막지_않는다` 테스트도 있다. 스케줄러에 같은 규칙을
 적용했다.
 
@@ -53,12 +53,12 @@ id 순서상 뒤에 있던 job은 그 주기에 처리되지 않았다.
 
 ## 완료: 스캔 조회 페이징 + 재조회 제거 (2026-08-19)
 
-`processFailedJobs()`와 `reapStaleProcessing()`의 조회에 `PageRequest.of(0, 100)` 상한을 걸었다. 정상
+`retryOrRefundFailedJobs()`와 `markStalledJobsAsFailed()`의 조회에 `PageRequest.of(0, 100)` 상한을 걸었다. 정상
 상태에서는 매 주기 배출되므로 폭증하지 않지만, 워커가 오래 죽었다 살아난 뒤의 버스트를 방어한다.
 배치 크기는 설정이 아니라 `SCAN_BATCH_SIZE` 클래스 상수다 — 배포마다 조절할 튜닝 노브가 아니라
 방어적 상한이라고 판단했다.
 
-`processFailedJobs()`의 `findById` 재조회를 없애고 스냅샷으로 바로 판단하게 했다. 재조회는 이 프로젝트가 쓰지
+`retryOrRefundFailedJobs()`의 `findById` 재조회를 없애고 스냅샷으로 바로 판단하게 했다. 재조회는 이 프로젝트가 쓰지
 않겠다고 선언한 check-then-act였고, `retry`/`finalRefund`가 `(id, status=FAILED, attemptNo)` 조건부
 UPDATE로 fencing하므로 낡은 스냅샷은 0행으로 무시되고 다음 주기에 자기 교정된다. attemptNo는 재시도마다
 증가하고 REFUNDED는 종결이라 ABA 문제도 없다. `markExpiredJobsAsFailed`의 `findById`는 남겼다 — 거기선
@@ -78,7 +78,7 @@ at-least-once를 택한 결과다.
 
 - README 4절 "DB unique 제약 위반을 중복 판정으로 사용 **(SELECT 후 INSERT 아님)**" — 실제 `HoldService`는
   SELECT 후 INSERT이고 unique 제약은 경합 시 백스톱으로만 쓴다. 부작용으로 경합 구간에서 재시도한
-  클라이언트가 원래 jobId(200 + duplicate) 대신 409를 받는다. `HoldService.toDuplicateResult`의
+  클라이언트가 원래 jobId(200 + duplicate) 대신 409를 받는다. `HoldService.resolveDuplicateRequest`의
   `jobId == null` 분기는 전체가 한 트랜잭션이라 사실상 도달 불가능하다.
 - 존재하지 않는 `credit_system_design.md` 참조와 같은 줄의 "(Blocker ① 해결, 아래 5절 참고)" 빈 참조.
 - 재시도 조건을 `attempt_no < 3`으로 서술 — 실제는 `attemptNo + 1 < maxAttempts`.

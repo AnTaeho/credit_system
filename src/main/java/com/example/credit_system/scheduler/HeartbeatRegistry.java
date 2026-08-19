@@ -47,14 +47,14 @@ public class HeartbeatRegistry {
     }
 
     public ScheduledFuture<?> startHeartbeat(Long jobId) {
-        touch(jobId);
+        refreshHeartbeat(jobId);
         long interval = appProperties.heartbeat().refreshIntervalSeconds();
-        return executor.scheduleAtFixedRate(() -> touch(jobId), interval, interval, TimeUnit.SECONDS);
+        return executor.scheduleAtFixedRate(() -> refreshHeartbeat(jobId), interval, interval, TimeUnit.SECONDS);
     }
 
     public void stopHeartbeat(Long jobId, ScheduledFuture<?> future) {
         future.cancel(false);
-        remove(jobId);
+        removeHeartbeat(jobId);
     }
 
     public Set<Long> findExpiredJobIds() {
@@ -77,7 +77,7 @@ public class HeartbeatRegistry {
         return expired.stream().map(Long::parseLong).collect(Collectors.toSet());
     }
 
-    private void touch(Long jobId) {
+    private void refreshHeartbeat(Long jobId) {
         double expireAt = clock.instant().getEpochSecond() + appProperties.heartbeat().timeoutSeconds();
         try {
             redisTemplate.opsForZSet().add(KEY, jobId.toString(), expireAt);
@@ -103,7 +103,7 @@ public class HeartbeatRegistry {
         return score != null && score > clock.instant().getEpochSecond();
     }
 
-    public void remove(Long jobId) {
+    public void removeHeartbeat(Long jobId) {
         try {
             redisTemplate.opsForZSet().remove(KEY, jobId.toString());
         } catch (RuntimeException e) {

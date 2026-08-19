@@ -31,7 +31,7 @@ public class LedgerReconciliationTask {
             checks = ledgerRepository.findBalanceChecks(PageRequest.of(page, RECONCILE_BATCH_SIZE));
             for (LedgerBalanceCheck check : checks) {
                 try {
-                    if (!reconcileOne(check)) {
+                    if (!isBalanceConsistent(check)) {
                         mismatchCount++;
                     }
                     checkedCount++;
@@ -44,7 +44,7 @@ public class LedgerReconciliationTask {
         log.info("원장 대사 주기 완료: checkedCount={}, mismatchCount={}", checkedCount, mismatchCount);
     }
 
-    private boolean reconcileOne(LedgerBalanceCheck check) {
+    private boolean isBalanceConsistent(LedgerBalanceCheck check) {
         long expected = check.initialBalance() + check.ledgerSum();
         if (expected == check.balance()) {
             return true;

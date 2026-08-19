@@ -41,7 +41,7 @@ public class HoldService {
         Optional<IdempotencyKey> existing = idempotencyKeyRepository
                 .findByOrganizationIdAndIdemKey(organizationId, idemKey);
         if (existing.isPresent()) {
-            return toDuplicateResult(existing.get());
+            return resolveDuplicateRequest(existing.get());
         }
 
         idempotencyKeyRepository.save(new IdempotencyKey(organizationId, idemKey));
@@ -73,7 +73,7 @@ public class HoldService {
         }
     }
 
-    private HoldResult toDuplicateResult(IdempotencyKey existing) {
+    private HoldResult resolveDuplicateRequest(IdempotencyKey existing) {
         if (existing.getJobId() == null) {
             throw new DuplicateRequestInProgressException();
         }

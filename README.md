@@ -51,8 +51,8 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
                                               └─ 결과 반영 실패 → 3회 재시도 후 PROCESSING 유지(회수 경로에 위임)
                                               ▼
                                     [DeadJobSchedulerTask] (스케줄러, 기본 5초 주기)
-                                              │  heartbeat 만료 PROCESSING → FAILED 회수
-                                              │  reapStaleProcessing: heartbeat 없는 PROCESSING → FAILED 회수
+                                              │  markExpiredJobsAsFailed: heartbeat 만료 PROCESSING → FAILED 회수
+                                              │  markStalledJobsAsFailed: heartbeat 없는 PROCESSING → FAILED 회수
                                               ▼
                                      FAILED job 재검토
                                        ├─ attempt_no + 1 < 3 → JobLifecycleService.retry: attempt_no+1 후 HOLDING으로 큐 재투입
@@ -106,10 +106,10 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
   읽어도 실행은 하나뿐
 - **HOLDING은 회수 대상이 아님**: HOLDING은 발행 실패 상태가 아니라 정상적인 큐 대기 상태이므로 경과
   시간만으로 실패 처리하지 않는다. 워커가 꺼져 있는 동안 쌓인 job은 재기동 후 다음 폴링에서 그대로 처리된다
-- **`reapStaleProcessing`**: `app.processing.timeout-seconds`(60초) 초과했는데 살아있는 heartbeat가
+- **`markStalledJobsAsFailed`**: `app.processing.timeout-seconds`(60초) 초과했는데 살아있는 heartbeat가
   없는 PROCESSING job을 FAILED로 회수 — Redis 장애, 선점 직후 executor 위임 실패와 롤백 실패, heartbeat
   등록 전 워커 크래시, 결과 반영(confirm) 재시도 소진을 모두 커버
-- **Heartbeat**: Redis sorted set에 워커가 실제 실행을 시작하는 시점(`GenerationJobProcessor.process`)에 등록하고
+- **Heartbeat**: Redis sorted set에 워커가 실제 실행을 시작하는 시점(`GenerationJobProcessor.runGeneration`)에 등록하고
   `app.heartbeat.refresh-interval-seconds`(5초)마다 갱신 — job 수와 무관하게 O(1) 조회로 마감 지난 job만
   스캔. Redis 장애 중에는 회수를 억제하되, 억제가 `app.heartbeat.suppression-alert-seconds`(60초)를 넘기면
   ERROR로 경보한다. `spring.data.redis.timeout`(2초)으로 Redis 커맨드 타임아웃을 짧게 잡아, 느려진 Redis가
@@ -175,7 +175,7 @@ com.example.credit_system
 │   ├── repository/OrganizationRepository.java  # deductBalance / addBalance 조건부 UPDATE
 │   └── service/ChargeService.java
 └── scheduler/
-    ├── DeadJobSchedulerTask.java        # heartbeat 만료·reapStaleProcessing 회수 / 재시도·최종환불 투입
+    ├── DeadJobSchedulerTask.java        # heartbeat 만료·정체 job 회수 / 재시도·최종환불 투입
     ├── HeartbeatRegistry.java           # Redis sorted-set heartbeat
     ├── RedisOutageGate.java             # Redis 장애 중 회수 억제·유예 판정과 장기 억제 경보
     ├── LedgerReconciliationTask.java    # initial_balance + Σledger = balance 대사, 불일치 시 ERROR 경보

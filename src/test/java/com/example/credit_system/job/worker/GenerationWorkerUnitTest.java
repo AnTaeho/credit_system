@@ -52,9 +52,9 @@ class GenerationWorkerUnitTest {
                 .thenReturn(List.of(job));
         when(jobRepository.startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class))).thenReturn(1);
 
-        worker.processPendingJobs();
+        worker.dispatchPendingJobs();
 
-        verify(jobProcessor).process(job);
+        verify(jobProcessor).runGeneration(job);
     }
 
     @Test
@@ -62,9 +62,9 @@ class GenerationWorkerUnitTest {
         doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
         doReturn(0).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
 
-        worker.processPendingJobs();
+        worker.dispatchPendingJobs();
 
-        verify(jobProcessor, never()).process(job);
+        verify(jobProcessor, never()).runGeneration(job);
     }
 
     @Test
@@ -74,16 +74,16 @@ class GenerationWorkerUnitTest {
                 .when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
 
         for (int i = 0; i < CONCURRENCY + 2; i++) {
-            worker.processPendingJobs();
+            worker.dispatchPendingJobs();
         }
 
-        verify(jobProcessor, never()).process(job);
+        verify(jobProcessor, never()).runGeneration(job);
 
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
 
-        worker.processPendingJobs();
+        worker.dispatchPendingJobs();
 
-        verify(jobProcessor).process(job);
+        verify(jobProcessor).runGeneration(job);
     }
 
     @Test
@@ -97,9 +97,9 @@ class GenerationWorkerUnitTest {
                 .transitionIfStatusAndAttemptMatch(eq(1L), eq(JobStatus.HOLDING), eq(JobStatus.PROCESSING),
                         eq(0), any(Instant.class));
 
-        assertThatCode(rejectingWorker::processPendingJobs).doesNotThrowAnyException();
+        assertThatCode(rejectingWorker::dispatchPendingJobs).doesNotThrowAnyException();
 
-        verify(jobProcessor, never()).process(job);
+        verify(jobProcessor, never()).runGeneration(job);
     }
 
     @Test
@@ -111,9 +111,9 @@ class GenerationWorkerUnitTest {
                 .when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(2L), eq(0), any(Instant.class));
 
-        worker.processPendingJobs();
+        worker.dispatchPendingJobs();
 
-        verify(jobProcessor).process(second);
+        verify(jobProcessor).runGeneration(second);
     }
 
     @Test
@@ -126,7 +126,7 @@ class GenerationWorkerUnitTest {
         doReturn(List.of(job, second)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
 
-        rejectingWorker.processPendingJobs();
+        rejectingWorker.dispatchPendingJobs();
 
         verify(jobRepository).transitionIfStatusAndAttemptMatch(
                 eq(1L), eq(JobStatus.HOLDING), eq(JobStatus.PROCESSING), eq(0), any(Instant.class));
@@ -141,9 +141,9 @@ class GenerationWorkerUnitTest {
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(2L), eq(0), any(Instant.class));
 
-        worker.processPendingJobs();
+        worker.dispatchPendingJobs();
 
-        verify(jobProcessor).process(job);
-        verify(jobProcessor).process(second);
+        verify(jobProcessor).runGeneration(job);
+        verify(jobProcessor).runGeneration(second);
     }
 }

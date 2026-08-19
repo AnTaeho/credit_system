@@ -88,7 +88,7 @@ class DeadJobSchedulerTaskTest {
 
         verify(jobRepository).transitionIfStatusAndAttemptMatch(
                 eq(20L), eq(JobStatus.FAILED), eq(JobStatus.PROCESSING), eq(0), any(Instant.class));
-        verify(heartbeatRegistry).remove(20L);
+        verify(heartbeatRegistry).removeHeartbeat(20L);
     }
 
     @Test
@@ -118,7 +118,7 @@ class DeadJobSchedulerTaskTest {
 
         verify(jobRepository).transitionIfStatusAndAttemptMatch(
                 eq(30L), eq(JobStatus.FAILED), eq(JobStatus.PROCESSING), eq(0), any(Instant.class));
-        verify(heartbeatRegistry).remove(30L);
+        verify(heartbeatRegistry).removeHeartbeat(30L);
     }
 
     @Test

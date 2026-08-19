@@ -36,7 +36,7 @@ public class GenerationWorker {
     }
 
     @Scheduled(fixedDelayString = "${app.scheduling.worker-interval-millis:500}")
-    public void processPendingJobs() {
+    public void dispatchPendingJobs() {
         List<Job> jobs = jobRepository.findByStatusOrderByIdAsc(JobStatus.HOLDING, PageRequest.of(0, batchSize));
         for (Job job : jobs) {
             if (!claim(job)) {
@@ -65,7 +65,7 @@ public class GenerationWorker {
 
     private boolean dispatch(Job job) {
         try {
-            workerExecutor.execute(() -> jobProcessor.process(job));
+            workerExecutor.execute(() -> jobProcessor.runGeneration(job));
             return true;
         } catch (RuntimeException e) {
             log.warn("생성 작업 executor 위임 실패, 이번 주기 중단: jobId={}, attemptNo={}",

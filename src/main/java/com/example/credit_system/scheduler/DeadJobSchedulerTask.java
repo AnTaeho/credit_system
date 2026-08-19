@@ -35,12 +35,12 @@ public class DeadJobSchedulerTask {
             log.error("heartbeat 만료 회수 단계 실패, 이번 주기 건너뜀", e);
         }
         try {
-            reapStaleProcessing();
+            markStalledJobsAsFailed();
         } catch (RuntimeException e) {
             log.error("PROCESSING 정체 회수 단계 실패, 이번 주기 건너뜀", e);
         }
         try {
-            processFailedJobs();
+            retryOrRefundFailedJobs();
         } catch (RuntimeException e) {
             log.error("FAILED job 재검토 단계 실패, 이번 주기 건너뜀", e);
         }
@@ -56,14 +56,14 @@ public class DeadJobSchedulerTask {
                         log.info("heartbeat 만료로 FAILED 전이: jobId={}, attemptNo={}", jobId, job.getAttemptNo());
                     }
                 });
-                heartbeatRegistry.remove(jobId);
+                heartbeatRegistry.removeHeartbeat(jobId);
             } catch (RuntimeException e) {
                 log.warn("heartbeat 만료 job 회수 실패: jobId={}", jobId, e);
             }
         }
     }
 
-    private void reapStaleProcessing() {
+    private void markStalledJobsAsFailed() {
         Instant cutoff = Instant.now().minusSeconds(appProperties.processing().timeoutSeconds());
         for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
                 JobStatus.PROCESSING, cutoff, PageRequest.of(0, SCAN_BATCH_SIZE))) {
@@ -74,7 +74,7 @@ public class DeadJobSchedulerTask {
                 int updated = jobRepository.transitionIfStatusAndAttemptMatch(
                         job.getId(), JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
                 if (updated == 1) {
-                    heartbeatRegistry.remove(job.getId());
+                    heartbeatRegistry.removeHeartbeat(job.getId());
                     log.info("PROCESSING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
                 }
             } catch (RuntimeException e) {
@@ -83,7 +83,7 @@ public class DeadJobSchedulerTask {
         }
     }
 
-    private void processFailedJobs() {
+    private void retryOrRefundFailedJobs() {
         for (Job job : jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED, PageRequest.of(0, SCAN_BATCH_SIZE))) {
             try {
                 if (job.getAttemptNo() + 1 < appProperties.generation().maxAttempts()) {

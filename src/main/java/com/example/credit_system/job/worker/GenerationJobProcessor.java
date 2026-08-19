@@ -23,7 +23,7 @@ public class GenerationJobProcessor {
     private final GenerationStubClient stubClient;
     private final JobLifecycleService jobLifecycleService;
 
-    public void process(Job job) {
+    public void runGeneration(Job job) {
         ScheduledFuture<?> heartbeatFuture = heartbeatRegistry.startHeartbeat(job.getId());
         try {
             String resultUrl;
