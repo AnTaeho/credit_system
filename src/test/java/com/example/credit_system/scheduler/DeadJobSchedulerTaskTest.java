@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -20,6 +21,7 @@ import java.util.Set;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -153,5 +155,49 @@ class DeadJobSchedulerTaskTest {
 
         verify(jobLifecycleService, never()).retry(any(Job.class));
         verify(jobLifecycleService, never()).finalRefund(any(Job.class));
+    }
+
+    @Test
+    void 한_job의_환불_실패가_같은_주기의_나머지_job을_막지_않는다() {
+        Job snapshot1 = failedJob(1L, 2);
+        Job snapshot2 = failedJob(2L, 2);
+        Job current1 = failedJob(1L, 2);
+        Job current2 = failedJob(2L, 2);
+        when(jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)).thenReturn(List.of(snapshot1, snapshot2));
+        when(jobRepository.findById(1L)).thenReturn(Optional.of(current1));
+        when(jobRepository.findById(2L)).thenReturn(Optional.of(current2));
+        doThrow(new IllegalStateException("조직 행 없음")).when(jobLifecycleService).finalRefund(current1);
+
+        task.scan();
+
+        verify(jobLifecycleService).finalRefund(current2);
+    }
+
+    @Test
+    void heartbeat_만료_회수_실패가_나머지_만료_job을_막지_않는다() {
+        Set<Long> expiredIds = new LinkedHashSet<>(List.of(1L, 2L));
+        when(heartbeatRegistry.findExpiredJobIds()).thenReturn(expiredIds);
+        when(jobRepository.findById(1L)).thenThrow(new RuntimeException("DB 오류"));
+        Job job2 = staleHoldingJob(2L);
+        when(jobRepository.findById(2L)).thenReturn(Optional.of(job2));
+
+        task.scan();
+
+        verify(jobRepository).transitionIfStatusAndAttemptMatch(
+                eq(2L), eq(JobStatus.FAILED), eq(JobStatus.PROCESSING), anyInt(), any(Instant.class));
+    }
+
+    @Test
+    void 한_단계의_실패가_다음_단계를_막지_않는다() {
+        doThrow(new RuntimeException("PROCESSING 조회 실패"))
+                .when(jobRepository).findByStatusAndUpdatedAtBeforeOrderByIdAsc(eq(JobStatus.PROCESSING), any(Instant.class));
+        Job snapshot = failedJob(50L, 1);
+        Job current = failedJob(50L, 1);
+        when(jobRepository.findByStatusOrderByIdAsc(JobStatus.FAILED)).thenReturn(List.of(snapshot));
+        when(jobRepository.findById(50L)).thenReturn(Optional.of(current));
+
+        task.scan();
+
+        verify(jobLifecycleService).retry(current);
     }
 }
