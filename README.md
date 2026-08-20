@@ -90,19 +90,25 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
 
 4개 테이블로 구성된다.
 
-- **organization**: `id`, `balance`, `initial_balance`, `updated_at` — 잔액을 `balance` 컬럼으로 직접
-  관리하되, `initial_balance + Σledger.amount = balance` 등식을 `LedgerReconciliationTask`가 주기적으로
-  대사해 검증한다
-- **job**: `id`, `org_id`, `status`(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED), `attempt_no`(fencing
-  토큰), `hold_amount`, `updated_at`(heartbeat 용도로도 사용) — 작업 큐를 겸하므로 워커의 배치 폴링
-  (status 필터 + id 정렬)을 위해 `idx_jobs_status_id(status, id)` 인덱스를 둔다
-- **idempotency_keys**: `id`, `org_id`, `idem_key`(org_id와 함께 unique), `job_id`, `created_at` — 자체
-  status 없이 job.status를 참조. `created_at` 기준으로 `app.idempotency.retention-days`(7일)가 지난
-  행을 `IdempotencyKeyCleanupTask`가 배치로 정리한다
-- **ledger**: `id`, `org_id`, `job_id`, `type`(HOLD/CONFIRM/REFUND/CHARGE), `amount`, `created_at` —
-  insert-only, 수정 없음
+- **organizations**: `id`, `name`, `balance`, `initial_balance`, `created_at`, `updated_at` — 잔액을
+  `balance` 컬럼으로 직접 관리하되, `initial_balance + Σledger.amount = balance` 등식을
+  `LedgerReconciliationTask`가 주기적으로 대사해 검증한다
+- **jobs**: `id`, `organization_id`, `status`(HOLDING/PROCESSING/COMPLETED/FAILED/REFUNDED),
+  `attempt_no`(fencing 토큰), `hold_amount`, `prompt`, `result_url`, `created_at`,
+  `updated_at`(PROCESSING 정체 판정 기준) — 작업 큐를 겸하므로 워커의 배치 폴링(status 필터 + id 정렬)을
+  위해 `idx_jobs_status_id(status, id)` 인덱스를 둔다
+- **idempotency_keys**: `id`, `organization_id`, `idem_key`, `job_id`, `created_at` — 자체 status 없이
+  job.status를 참조. `uk_idempotency_org_key(organization_id, idem_key)`가 중복 요청 판정의 백스톱이고,
+  `created_at` 기준으로 `app.idempotency.retention-days`(7일)가 지난 행을 `IdempotencyKeyCleanupTask`가
+  배치로 정리한다. 그 스캔을 위해 `idx_idem_created_at(created_at)` 인덱스를 둔다
+- **ledger_entries**: `id`, `organization_id`, `job_id`, `type`(HOLD/CONFIRM/REFUND/CHARGE), `amount`,
+  `idem_key`, `created_at` — insert-only, 수정 없음. `idem_key`는 CHARGE만 채우고 나머지 타입은 null로
+  두며, `uk_ledger_org_idem(organization_id, idem_key)`가 충전 멱등성을 보장한다(unique 인덱스에서 null은
+  서로 다른 값으로 취급되므로 idem_key 없는 행은 서로 충돌하지 않는다). 대사 배치가 조직별로 집계하므로
+  `idx_ledger_org_id(organization_id)` 인덱스를 둔다
 
-관계: `organization 1—N job`, `job 1—0/1 idempotency_keys`, `job 1—N ledger`
+관계: `organizations 1—N jobs`, `jobs 1—0/1 idempotency_keys`, `organizations 1—N ledger_entries`
+(`ledger_entries.job_id`는 HOLD·CONFIRM·REFUND만 채우고 CHARGE는 null이다)
 
 ## 6. 신뢰성 장치
 
