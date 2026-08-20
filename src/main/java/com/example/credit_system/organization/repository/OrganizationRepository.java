@@ -10,7 +10,7 @@ import java.time.Instant;
 
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE Organization o
             SET o.balance = o.balance - :amount, o.updatedAt = :now
@@ -20,7 +20,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
                       @Param("amount") long amount,
                       @Param("now") Instant now);
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE Organization o
             SET o.balance = o.balance + :amount, o.updatedAt = :now

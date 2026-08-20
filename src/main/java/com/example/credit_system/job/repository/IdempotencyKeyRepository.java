@@ -16,7 +16,7 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
 
     Optional<IdempotencyKey> findByOrganizationIdAndIdemKey(Long organizationId, String idemKey);
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE IdempotencyKey k SET k.jobId = :jobId WHERE k.organizationId = :organizationId AND k.idemKey = :idemKey")
     int attachJobId(@Param("organizationId") Long organizationId,
                     @Param("idemKey") String idemKey,
@@ -26,7 +26,7 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
     List<Long> findIdsCreatedBefore(@Param("cutoff") Instant cutoff, Pageable pageable);
 
     @Transactional
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM IdempotencyKey k WHERE k.id IN :ids")
     int deleteByIdIn(@Param("ids") List<Long> ids);
 }

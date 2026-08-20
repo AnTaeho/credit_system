@@ -15,7 +15,7 @@ import java.util.List;
 public interface JobRepository extends JpaRepository<Job, Long> {
 
     @Transactional
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE Job j
             SET j.status = com.example.credit_system.job.domain.JobStatus.PROCESSING,
@@ -29,7 +29,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                         @Param("now") Instant now);
 
     @Transactional
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE Job j
             SET j.status = com.example.credit_system.job.domain.JobStatus.COMPLETED,
@@ -44,7 +44,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                  @Param("now") Instant now);
 
     @Transactional
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE Job j
             SET j.status = :newStatus, j.updatedAt = :now
@@ -57,7 +57,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                           @Param("now") Instant now);
 
     @Transactional
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE Job j
             SET j.attemptNo = j.attemptNo + 1,
