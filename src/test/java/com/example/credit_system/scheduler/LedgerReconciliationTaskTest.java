@@ -101,17 +101,21 @@ class LedgerReconciliationTaskTest {
 
     @Test
     void 배치_크기를_넘는_조직도_모두_검사한다() {
-        Organization lastOrg = null;
-        for (int i = 0; i < 105; i++) {
-            lastOrg = organizationRepository.save(new Organization("org-" + i, 1000L));
+        int mismatchIndex = 119;
+        Organization mismatchOrg = null;
+        for (int i = 0; i < 205; i++) {
+            Organization org = organizationRepository.save(new Organization("org-" + i, 1000L));
+            if (i == mismatchIndex) {
+                mismatchOrg = org;
+            }
         }
-        organizationRepository.addBalance(lastOrg.getId(), 1L, Instant.now());
+        organizationRepository.addBalance(mismatchOrg.getId(), 1L, Instant.now());
         organizationRepository.flush();
 
         task.reconcile();
 
         assertThat(errorLogs()).hasSize(1);
-        assertThat(errorLogs().get(0).getFormattedMessage()).contains("organizationId=" + lastOrg.getId());
+        assertThat(errorLogs().get(0).getFormattedMessage()).contains("organizationId=" + mismatchOrg.getId());
     }
 
     private List<ILoggingEvent> errorLogs() {

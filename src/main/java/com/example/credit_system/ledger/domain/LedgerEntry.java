@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -16,7 +17,7 @@ import java.time.Instant;
 
 @Entity
 @Getter
-@Table(name = "ledger_entries")
+@Table(name = "ledger_entries", indexes = @Index(name = "idx_ledger_org_id", columnList = "organizationId"))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class LedgerEntry {
 

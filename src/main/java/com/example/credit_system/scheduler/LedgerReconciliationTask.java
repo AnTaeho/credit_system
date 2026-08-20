@@ -25,10 +25,10 @@ public class LedgerReconciliationTask {
     public void reconcile() {
         int checkedCount = 0;
         int mismatchCount = 0;
-        int page = 0;
+        long lastId = 0L;
         List<LedgerBalanceCheck> checks;
         do {
-            checks = ledgerRepository.findBalanceChecks(PageRequest.of(page, RECONCILE_BATCH_SIZE));
+            checks = ledgerRepository.findBalanceChecksAfter(lastId, PageRequest.of(0, RECONCILE_BATCH_SIZE));
             for (LedgerBalanceCheck check : checks) {
                 try {
                     if (!isBalanceConsistent(check)) {
@@ -38,8 +38,8 @@ public class LedgerReconciliationTask {
                 } catch (RuntimeException e) {
                     log.warn("원장 대사 항목 처리 실패: organizationId={}", check.organizationId(), e);
                 }
+                lastId = check.organizationId();
             }
-            page++;
         } while (checks.size() == RECONCILE_BATCH_SIZE);
         log.info("원장 대사 주기 완료: checkedCount={}, mismatchCount={}", checkedCount, mismatchCount);
     }
