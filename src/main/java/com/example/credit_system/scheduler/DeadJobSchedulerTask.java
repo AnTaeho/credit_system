@@ -47,18 +47,16 @@ public class DeadJobSchedulerTask {
     }
 
     private void markExpiredJobsAsFailed() {
-        for (Long jobId : heartbeatRegistry.findExpiredJobIds()) {
+        for (JobAttempt attempt : heartbeatRegistry.findExpiredAttempts()) {
             try {
-                jobRepository.findById(jobId).ifPresent(job -> {
-                    int updated = jobRepository.transitionIfStatusAndAttemptMatch(
-                            jobId, JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
-                    if (updated == 1) {
-                        log.info("heartbeat 만료로 FAILED 전이: jobId={}, attemptNo={}", jobId, job.getAttemptNo());
-                    }
-                });
-                heartbeatRegistry.removeHeartbeat(jobId);
+                int updated = jobRepository.transitionIfStatusAndAttemptMatch(
+                        attempt.jobId(), JobStatus.FAILED, JobStatus.PROCESSING, attempt.attemptNo(), Instant.now());
+                if (updated == 1) {
+                    log.info("heartbeat 만료로 FAILED 전이: jobId={}, attemptNo={}", attempt.jobId(), attempt.attemptNo());
+                }
+                heartbeatRegistry.removeHeartbeat(attempt.jobId(), attempt.attemptNo());
             } catch (RuntimeException e) {
-                log.warn("heartbeat 만료 job 회수 실패: jobId={}", jobId, e);
+                log.warn("heartbeat 만료 job 회수 실패: jobId={}, attemptNo={}", attempt.jobId(), attempt.attemptNo(), e);
             }
         }
     }
@@ -68,13 +66,13 @@ public class DeadJobSchedulerTask {
         for (Job job : jobRepository.findByStatusAndUpdatedAtBeforeOrderByIdAsc(
                 JobStatus.PROCESSING, cutoff, PageRequest.of(0, SCAN_BATCH_SIZE))) {
             try {
-                if (heartbeatRegistry.hasLiveHeartbeat(job.getId())) {
+                if (heartbeatRegistry.hasLiveHeartbeat(job.getId(), job.getAttemptNo())) {
                     continue;
                 }
                 int updated = jobRepository.transitionIfStatusAndAttemptMatch(
                         job.getId(), JobStatus.FAILED, JobStatus.PROCESSING, job.getAttemptNo(), Instant.now());
                 if (updated == 1) {
-                    heartbeatRegistry.removeHeartbeat(job.getId());
+                    heartbeatRegistry.removeHeartbeat(job.getId(), job.getAttemptNo());
                     log.info("PROCESSING 정체 job 회수, FAILED 전이: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo());
                 }
             } catch (RuntimeException e) {

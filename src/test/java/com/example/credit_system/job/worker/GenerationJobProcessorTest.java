@@ -37,7 +37,7 @@ class GenerationJobProcessorTest {
         processor = new GenerationJobProcessor(heartbeatRegistry, stubClient, jobLifecycleService);
         job = Job.hold(10L, 100L, "cat");
         ReflectionTestUtils.setField(job, "id", 1L);
-        doReturn(heartbeatFuture).when(heartbeatRegistry).startHeartbeat(1L);
+        doReturn(heartbeatFuture).when(heartbeatRegistry).startHeartbeat(1L, 0);
     }
 
     @Test
@@ -47,7 +47,7 @@ class GenerationJobProcessorTest {
         processor.runGeneration(job);
 
         verify(jobLifecycleService).confirm(job, "https://example.test/cat.png");
-        verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
+        verify(heartbeatRegistry).stopHeartbeat(1L, 0, heartbeatFuture);
     }
 
     @Test
@@ -58,7 +58,7 @@ class GenerationJobProcessorTest {
 
         verify(jobLifecycleService).markFailed(1L, 0);
         verify(jobLifecycleService, never()).confirm(job, "https://example.test/cat.png");
-        verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
+        verify(heartbeatRegistry).stopHeartbeat(1L, 0, heartbeatFuture);
     }
 
     @Test
@@ -72,7 +72,7 @@ class GenerationJobProcessorTest {
 
         verify(jobLifecycleService, times(2)).confirm(job, "https://example.test/cat.png");
         verify(jobLifecycleService, never()).markFailed(1L, 0);
-        verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
+        verify(heartbeatRegistry).stopHeartbeat(1L, 0, heartbeatFuture);
     }
 
     @Test
@@ -85,6 +85,6 @@ class GenerationJobProcessorTest {
 
         verify(jobLifecycleService, times(3)).confirm(job, "https://example.test/cat.png");
         verify(jobLifecycleService, never()).markFailed(1L, 0);
-        verify(heartbeatRegistry).stopHeartbeat(1L, heartbeatFuture);
+        verify(heartbeatRegistry).stopHeartbeat(1L, 0, heartbeatFuture);
     }
 }

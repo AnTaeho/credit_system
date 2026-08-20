@@ -9,12 +9,13 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -46,18 +47,19 @@ public class HeartbeatRegistry {
         this.outageGate = new RedisOutageGate(appProperties, clock);
     }
 
-    public ScheduledFuture<?> startHeartbeat(Long jobId) {
-        refreshHeartbeat(jobId);
+    public ScheduledFuture<?> startHeartbeat(Long jobId, int attemptNo) {
+        JobAttempt attempt = new JobAttempt(jobId, attemptNo);
+        refreshHeartbeat(attempt);
         long interval = appProperties.heartbeat().refreshIntervalSeconds();
-        return executor.scheduleAtFixedRate(() -> refreshHeartbeat(jobId), interval, interval, TimeUnit.SECONDS);
+        return executor.scheduleAtFixedRate(() -> refreshHeartbeat(attempt), interval, interval, TimeUnit.SECONDS);
     }
 
-    public void stopHeartbeat(Long jobId, ScheduledFuture<?> future) {
+    public void stopHeartbeat(Long jobId, int attemptNo, ScheduledFuture<?> future) {
         future.cancel(false);
-        removeHeartbeat(jobId);
+        removeHeartbeat(jobId, attemptNo);
     }
 
-    public Set<Long> findExpiredJobIds() {
+    public Set<JobAttempt> findExpiredAttempts() {
         if (outageGate.isInRecoveryGrace()) {
             log.debug("Redis 복구 유예 구간, heartbeat 만료 판정 보류");
             return Set.of();
@@ -74,41 +76,62 @@ public class HeartbeatRegistry {
         if (expired == null || expired.isEmpty()) {
             return Set.of();
         }
-        return expired.stream().map(Long::parseLong).collect(Collectors.toSet());
+        Set<JobAttempt> attempts = new HashSet<>();
+        for (String member : expired) {
+            Optional<JobAttempt> attempt = JobAttempt.parse(member);
+            if (attempt.isPresent()) {
+                attempts.add(attempt.get());
+            } else {
+                removeUnparseableMember(member);
+            }
+        }
+        return attempts;
     }
 
-    private void refreshHeartbeat(Long jobId) {
+    private void removeUnparseableMember(String member) {
+        try {
+            redisTemplate.opsForZSet().remove(KEY, member);
+            log.warn("해석할 수 없는 heartbeat 멤버 제거: {}", member);
+        } catch (RuntimeException e) {
+            outageGate.recordFailure();
+            log.warn("해석할 수 없는 heartbeat 멤버 제거 실패: {}", member, e);
+        }
+    }
+
+    private void refreshHeartbeat(JobAttempt attempt) {
         double expireAt = clock.instant().getEpochSecond() + appProperties.heartbeat().timeoutSeconds();
         try {
-            redisTemplate.opsForZSet().add(KEY, jobId.toString(), expireAt);
+            redisTemplate.opsForZSet().add(KEY, attempt.toMember(), expireAt);
         } catch (RuntimeException e) {
             outageGate.recordFailure();
-            log.warn("heartbeat 갱신 실패: jobId={}", jobId, e);
+            log.warn("heartbeat 갱신 실패: jobId={}, attemptNo={}", attempt.jobId(), attempt.attemptNo(), e);
         }
     }
 
-    public boolean hasLiveHeartbeat(Long jobId) {
+    public boolean hasLiveHeartbeat(Long jobId, int attemptNo) {
         if (outageGate.isInRecoveryGrace()) {
-            log.debug("Redis 복구 유예 구간, 회수 보류: jobId={}", jobId);
+            log.debug("Redis 복구 유예 구간, 회수 보류: jobId={}, attemptNo={}", jobId, attemptNo);
             return true;
         }
+        String member = new JobAttempt(jobId, attemptNo).toMember();
         Double score;
         try {
-            score = redisTemplate.opsForZSet().score(KEY, jobId.toString());
+            score = redisTemplate.opsForZSet().score(KEY, member);
         } catch (RuntimeException e) {
             outageGate.recordFailure();
-            log.warn("heartbeat 조회 실패, 회수 보류: jobId={}", jobId, e);
+            log.warn("heartbeat 조회 실패, 회수 보류: jobId={}, attemptNo={}", jobId, attemptNo, e);
             return true;
         }
         return score != null && score > clock.instant().getEpochSecond();
     }
 
-    public void removeHeartbeat(Long jobId) {
+    public void removeHeartbeat(Long jobId, int attemptNo) {
+        String member = new JobAttempt(jobId, attemptNo).toMember();
         try {
-            redisTemplate.opsForZSet().remove(KEY, jobId.toString());
+            redisTemplate.opsForZSet().remove(KEY, member);
         } catch (RuntimeException e) {
             outageGate.recordFailure();
-            log.warn("heartbeat 제거 실패: jobId={}", jobId, e);
+            log.warn("heartbeat 제거 실패: jobId={}, attemptNo={}", jobId, attemptNo, e);
         }
     }
 

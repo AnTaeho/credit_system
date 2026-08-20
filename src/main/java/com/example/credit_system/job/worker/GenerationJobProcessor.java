@@ -24,7 +24,8 @@ public class GenerationJobProcessor {
     private final JobLifecycleService jobLifecycleService;
 
     public void runGeneration(Job job) {
-        ScheduledFuture<?> heartbeatFuture = heartbeatRegistry.startHeartbeat(job.getId());
+        int attemptNo = job.getAttemptNo();
+        ScheduledFuture<?> heartbeatFuture = heartbeatRegistry.startHeartbeat(job.getId(), attemptNo);
         try {
             String resultUrl;
             try {
@@ -41,7 +42,7 @@ public class GenerationJobProcessor {
                         job.getId(), job.getAttemptNo(), e);
             }
         } finally {
-            heartbeatRegistry.stopHeartbeat(job.getId(), heartbeatFuture);
+            heartbeatRegistry.stopHeartbeat(job.getId(), attemptNo, heartbeatFuture);
         }
     }
 
