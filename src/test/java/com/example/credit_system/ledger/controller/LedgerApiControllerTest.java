@@ -41,7 +41,7 @@ class LedgerApiControllerTest {
     void setUp() {
         organization = organizationRepository.save(new Organization("acme", 1000L));
         ledgerRepository.save(LedgerEntry.of(organization.getId(), 1L, LedgerType.HOLD, -100L));
-        ledgerRepository.save(LedgerEntry.of(organization.getId(), null, LedgerType.CHARGE, 500L));
+        ledgerRepository.save(LedgerEntry.charge(organization.getId(), "charge-key-1", 500L));
     }
 
     @AfterEach

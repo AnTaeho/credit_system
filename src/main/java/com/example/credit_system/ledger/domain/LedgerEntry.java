@@ -56,10 +56,17 @@ public class LedgerEntry {
     }
 
     public static LedgerEntry of(Long organizationId, Long jobId, LedgerType type, long amount) {
+        if (type == LedgerType.CHARGE) {
+            throw new IllegalArgumentException(
+                    "CHARGE 타입은 멱등키 없이 생성할 수 없습니다. charge(organizationId, idemKey, amount)를 사용하세요.");
+        }
         return new LedgerEntry(organizationId, jobId, type, amount, null);
     }
 
     public static LedgerEntry charge(Long organizationId, String idemKey, long amount) {
+        if (idemKey == null || idemKey.isBlank()) {
+            throw new IllegalArgumentException("CHARGE 원장은 idemKey가 비어 있으면 안 됩니다: idemKey=" + idemKey);
+        }
         return new LedgerEntry(organizationId, null, LedgerType.CHARGE, amount, idemKey);
     }
 }

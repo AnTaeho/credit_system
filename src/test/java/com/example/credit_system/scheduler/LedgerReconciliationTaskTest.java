@@ -64,7 +64,7 @@ class LedgerReconciliationTaskTest {
     @Test
     void 충전과_hold가_반영된_조직도_대사를_통과한다() {
         Organization org = organizationRepository.save(new Organization("acme", 1000L));
-        ledgerRepository.save(LedgerEntry.of(org.getId(), null, LedgerType.CHARGE, 500L));
+        ledgerRepository.save(LedgerEntry.charge(org.getId(), "charge-key-2", 500L));
         ledgerRepository.save(LedgerEntry.of(org.getId(), null, LedgerType.HOLD, -100L));
         organizationRepository.addBalance(org.getId(), 400L, Instant.now());
         organizationRepository.flush();
@@ -77,7 +77,7 @@ class LedgerReconciliationTaskTest {
     @Test
     void 잔액이_원장과_어긋나면_ERROR로_경보한다() {
         Organization org = organizationRepository.save(new Organization("acme", 1000L));
-        ledgerRepository.save(LedgerEntry.of(org.getId(), null, LedgerType.CHARGE, 500L));
+        ledgerRepository.save(LedgerEntry.charge(org.getId(), "charge-key-3", 500L));
         organizationRepository.addBalance(org.getId(), 999L, Instant.now());
         organizationRepository.flush();
 
