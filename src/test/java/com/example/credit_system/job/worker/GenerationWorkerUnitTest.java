@@ -31,6 +31,7 @@ import static org.mockito.Mockito.when;
 class GenerationWorkerUnitTest {
 
     private static final int CONCURRENCY = 3;
+    private static final long POLL_INTERVAL_MILLIS = 500;
 
     @Mock JobRepository jobRepository;
     @Mock GenerationJobProcessor jobProcessor;
@@ -41,7 +42,7 @@ class GenerationWorkerUnitTest {
     @BeforeEach
     void setUp() {
         worker = new GenerationWorker(jobRepository, jobProcessor, new SyncTaskExecutor(),
-                new WorkerProperties(true, 20, CONCURRENCY));
+                new WorkerProperties(true, 20, CONCURRENCY), POLL_INTERVAL_MILLIS);
         job = Job.hold(10L, 100L, "cat");
         ReflectionTestUtils.setField(job, "id", 1L);
     }
@@ -90,7 +91,7 @@ class GenerationWorkerUnitTest {
     void executor_위임과_롤백이_모두_실패해도_예외가_새어나가지_않는다() {
         GenerationWorker rejectingWorker = new GenerationWorker(jobRepository, jobProcessor,
                 task -> { throw new IllegalStateException("executor shutdown"); },
-                new WorkerProperties(true, 20, CONCURRENCY));
+                new WorkerProperties(true, 20, CONCURRENCY), POLL_INTERVAL_MILLIS);
         doReturn(List.of(job)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
         doThrow(new QueryTimeoutException("db unavailable")).when(jobRepository)
@@ -122,7 +123,7 @@ class GenerationWorkerUnitTest {
         ReflectionTestUtils.setField(second, "id", 2L);
         GenerationWorker rejectingWorker = new GenerationWorker(jobRepository, jobProcessor,
                 task -> { throw new TaskRejectedException("pool exhausted"); },
-                new WorkerProperties(true, 20, CONCURRENCY));
+                new WorkerProperties(true, 20, CONCURRENCY), POLL_INTERVAL_MILLIS);
         doReturn(List.of(job, second)).when(jobRepository).findByStatusOrderByIdAsc(eq(JobStatus.HOLDING), any());
         doReturn(1).when(jobRepository).startProcessingIfAttemptMatches(eq(1L), eq(0), any(Instant.class));
 

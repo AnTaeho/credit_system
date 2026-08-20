@@ -128,7 +128,7 @@ class WorkerBatchSizeBenchmark {
         executor.initialize();
 
         GenerationWorker worker = new GenerationWorker(countingRepository, fakeProcessor, executor,
-                new WorkerProperties(true, batchSize, concurrency));
+                new WorkerProperties(true, batchSize, concurrency), pollMillis);
 
         AtomicReference<Throwable> failure = new AtomicReference<>();
         ScheduledExecutorService driver = Executors.newSingleThreadScheduledExecutor();
