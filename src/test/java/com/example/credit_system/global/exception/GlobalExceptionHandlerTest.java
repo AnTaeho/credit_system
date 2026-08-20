@@ -1,9 +1,12 @@
 package com.example.credit_system.global.exception;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
+import java.sql.SQLException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,11 +34,30 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void 유니크_제약_위반은_중복_처리중으로_번역된다() {
+        ConstraintViolationException uniqueViolation = new ConstraintViolationException(
+                "constraint violated", new SQLException("Duplicate entry"),
+                ConstraintViolationException.ConstraintKind.UNIQUE, "uk_idempotency_org_key");
+
         ResponseEntity<ErrorResponse> response =
-                handler.handleDataIntegrityViolation(new DataIntegrityViolationException("constraint violated"));
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException("constraint violated", uniqueViolation));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().code()).isEqualTo("DUPLICATE_IN_PROGRESS");
+    }
+
+    @Test
+    void 무관한_무결성_위반은_500과_별도_코드로_분리된다() {
+        ConstraintViolationException notNullViolation = new ConstraintViolationException(
+                "constraint violated", new SQLException("Column 'prompt' cannot be null"),
+                ConstraintViolationException.ConstraintKind.NOT_NULL, "prompt");
+
+        ResponseEntity<ErrorResponse> response =
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException("constraint violated", notNullViolation));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody().code()).isEqualTo("DATA_INTEGRITY_VIOLATION");
     }
 
     @Test
