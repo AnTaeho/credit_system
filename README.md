@@ -3,7 +3,7 @@
 Organization이 공유하는 크레딧을 선결제/차감하고, 비동기 이미지 생성(stub) 실패 시 정확히 환불하는 것을
 목표로 한 포트폴리오 프로젝트다. 핵심 주장은 "크레딧은 항상 정확하게 차감·환불된다"이며, 이를
 check-then-act 대신 **조건부 UPDATE/INSERT 하나로 확인+실행을 원자화**하는 설계 원칙과 attemptNo
-fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 119건의 테스트로 증명한다.
+fencing으로 보장하고, Testcontainers 기반 동시성·E2E 테스트를 포함한 총 121건의 테스트로 증명한다.
 이미지 생성 자체는 관심사가 아니므로 지연+확률적 실패를 가진 `GenerationStubClient`로 대체돼 있다.
 
 ## 1. 프로젝트 개요
@@ -45,7 +45,7 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
                                     jobs 테이블 = 영속 작업 큐 (status=HOLDING)
                                               ▼
                                      [GenerationWorker] (@Scheduled 폴링, 기본 500ms)
-                                              │  HOLDING job을 app.worker.batch-size(20)건까지 조회
+                                              │  HOLDING job을 app.worker.batch-size(3)건까지 조회
                                               │  startProcessingIfAttemptMatches 조건부 UPDATE로 선점
                                               │  전용 executor(concurrency 3, 내부 큐 없음)로 위임
                                               ▼
@@ -124,7 +124,7 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
   스레드 수를 단독으로 결정한다 — executor 내부 큐 용량은 0이라 Spring의 `ThreadPoolTaskExecutor`는
   내부적으로 `SynchronousQueue`를 쓰고, 스레드가 모두 사용 중이면 `execute()`가 즉시 거부한다. 워커는
   이 거부를 신호로 선점한 job을 HOLDING으로 롤백하고 그 주기를 중단하므로, 선점만 해두고 실행되지
-  않는 job이 생기지 않는다. `app.worker.batch-size`(20)는 한 폴링 주기의 조회 상한이고,
+  않는 job이 생기지 않는다. `app.worker.batch-size`(3)는 한 폴링 주기의 조회 상한이고,
   `spring.task.scheduling.pool.size`(4)는 `@Scheduled` 네 개(워커 폴링, `DeadJobSchedulerTask`,
   `LedgerReconciliationTask`, `IdempotencyKeyCleanupTask`)가 같은 스케줄러 스레드를 두고 경합하지 않게
   한다. 두 값은 `WorkerProperties`가 기동 시점에 검증한다(1 미만이면 시작 실패)

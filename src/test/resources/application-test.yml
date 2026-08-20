@@ -18,7 +18,7 @@ app:
     retention-days: 7
   worker:
     enabled: false
-    batch-size: 20
+    batch-size: 3
     concurrency: 3
   generation:
     cost: 100
