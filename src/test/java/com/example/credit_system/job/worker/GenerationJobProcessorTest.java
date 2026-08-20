@@ -62,6 +62,17 @@ class GenerationJobProcessorTest {
     }
 
     @Test
+    void 예기치_못한_런타임예외도_FAILED로_기록하고_heartbeat를_정리한다() {
+        when(stubClient.generate("cat")).thenThrow(new IllegalStateException("interrupted"));
+
+        processor.runGeneration(job);
+
+        verify(jobLifecycleService).markFailed(1L, 0);
+        verify(jobLifecycleService, never()).confirm(job, "https://example.test/cat.png");
+        verify(heartbeatRegistry).stopHeartbeat(1L, 0, heartbeatFuture);
+    }
+
+    @Test
     void 결과_반영이_실패해도_재시도가_성공하면_결과를_살린다() {
         when(stubClient.generate("cat")).thenReturn("https://example.test/cat.png");
         doThrow(new IllegalStateException("database unavailable"))

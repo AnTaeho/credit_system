@@ -33,6 +33,10 @@ public class GenerationJobProcessor {
             } catch (StubGenerationException e) {
                 jobLifecycleService.markFailed(job.getId(), job.getAttemptNo());
                 return;
+            } catch (RuntimeException e) {
+                log.error("생성 중 예기치 못한 예외 발생: jobId={}, attemptNo={}", job.getId(), job.getAttemptNo(), e);
+                jobLifecycleService.markFailed(job.getId(), job.getAttemptNo());
+                return;
             }
 
             try {
