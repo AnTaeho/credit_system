@@ -2,6 +2,7 @@ package com.example.credit_system.organization.controller;
 
 import com.example.credit_system.organization.dto.BalanceResponse;
 import com.example.credit_system.organization.dto.ChargeRequest;
+import com.example.credit_system.organization.dto.ChargeResponse;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.repository.OrganizationRepository;
 import com.example.credit_system.organization.service.ChargeService;
@@ -30,8 +31,8 @@ public class OrganizationApiController {
     }
 
     @PostMapping("/me/charge")
-    public BalanceResponse charge(@RequestHeader("X-Organization-Id") Long organizationId,
+    public ChargeResponse charge(@RequestHeader("X-Organization-Id") Long organizationId,
                                   @RequestBody ChargeRequest request) {
-        return new BalanceResponse(chargeService.charge(organizationId, request.amount()));
+        return chargeService.charge(organizationId, request.idemKey(), request.amount());
     }
 }

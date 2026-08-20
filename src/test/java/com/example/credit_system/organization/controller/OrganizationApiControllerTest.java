@@ -3,6 +3,7 @@ package com.example.credit_system.organization.controller;
 import com.example.credit_system.organization.domain.Organization;
 import com.example.credit_system.organization.dto.BalanceResponse;
 import com.example.credit_system.organization.dto.ChargeRequest;
+import com.example.credit_system.organization.dto.ChargeResponse;
 import com.example.credit_system.organization.repository.OrganizationRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,11 +53,31 @@ class OrganizationApiControllerTest {
         assertThat(before.getBody().balance()).isEqualTo(500L);
 
         headers.setContentType(MediaType.APPLICATION_JSON);
-        ResponseEntity<BalanceResponse> after = restTemplate.exchange(
+        ResponseEntity<ChargeResponse> after = restTemplate.exchange(
                 url("/api/organizations/me/charge"), HttpMethod.POST,
-                new HttpEntity<>(new ChargeRequest(300L), headers), BalanceResponse.class);
+                new HttpEntity<>(new ChargeRequest("idem-1", 300L), headers), ChargeResponse.class);
 
         assertThat(after.getBody().balance()).isEqualTo(800L);
+        assertThat(after.getBody().duplicate()).isFalse();
+    }
+
+    @Test
+    void 같은_idemKey로_두_번_충전하면_두_번째_응답은_중복이다() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-Organization-Id", String.valueOf(organization.getId()));
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        ResponseEntity<ChargeResponse> first = restTemplate.exchange(
+                url("/api/organizations/me/charge"), HttpMethod.POST,
+                new HttpEntity<>(new ChargeRequest("idem-dup", 300L), headers), ChargeResponse.class);
+        ResponseEntity<ChargeResponse> second = restTemplate.exchange(
+                url("/api/organizations/me/charge"), HttpMethod.POST,
+                new HttpEntity<>(new ChargeRequest("idem-dup", 300L), headers), ChargeResponse.class);
+
+        assertThat(first.getBody().duplicate()).isFalse();
+        assertThat(first.getBody().balance()).isEqualTo(800L);
+        assertThat(second.getBody().duplicate()).isTrue();
+        assertThat(second.getBody().balance()).isEqualTo(800L);
     }
 
     @Test

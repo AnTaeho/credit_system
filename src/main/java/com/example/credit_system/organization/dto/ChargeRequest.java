@@ -1,4 +1,4 @@
 package com.example.credit_system.organization.dto;
 
-public record ChargeRequest(long amount) {
+public record ChargeRequest(String idemKey, long amount) {
 }
