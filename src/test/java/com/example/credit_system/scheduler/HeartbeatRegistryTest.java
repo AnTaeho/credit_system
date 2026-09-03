@@ -14,21 +14,18 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,7 +46,7 @@ class HeartbeatRegistryTest {
         AppProperties appProperties = new AppProperties(
                 new AppProperties.Generation(100L, 3),
                 null,
-                new AppProperties.Heartbeat(10, 1, 60),
+                new AppProperties.Heartbeat(10, 1),
                 new AppProperties.Processing(60));
         clock = new MutableClock(Instant.now());
         WorkerProperties workerProperties = new WorkerProperties(true, 20, 3);
@@ -75,34 +72,37 @@ class HeartbeatRegistryTest {
     }
 
     @Test
-    void findExpiredAttempts는_Redis_예외_시_빈_집합을_반환한다() {
+    void findExpiredAttempts는_Redis_예외를_전파한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
 
-        assertThat(registry.findExpiredAttempts()).isEmpty();
+        assertThatThrownBy(() -> registry.findExpiredAttempts())
+                .isInstanceOf(RedisConnectionFailureException.class);
     }
 
     @Test
-    void hasLiveHeartbeat는_Redis_예외_시_true를_반환한다() {
+    void hasLiveHeartbeat는_Redis_예외를_전파한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.score(KEY, "5:0"))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
 
-        assertThat(registry.hasLiveHeartbeat(5L, 0)).isTrue();
+        assertThatThrownBy(() -> registry.hasLiveHeartbeat(5L, 0))
+                .isInstanceOf(RedisConnectionFailureException.class);
     }
 
     @Test
-    void removeHeartbeat는_Redis_예외를_삼킨다() {
+    void removeHeartbeat는_Redis_예외를_전파한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.remove(KEY, "7:0"))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
 
-        assertThatCode(() -> registry.removeHeartbeat(7L, 0)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> registry.removeHeartbeat(7L, 0))
+                .isInstanceOf(RedisConnectionFailureException.class);
     }
 
     @Test
-    void stopHeartbeat은_removeHeartbeat가_Redis_예외를_던져도_전파하지_않는다() {
+    void stopHeartbeat은_removeHeartbeat가_Redis_예외를_던지면_전파한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.add(anyString(), anyString(), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("redis down"));
@@ -111,7 +111,8 @@ class HeartbeatRegistryTest {
 
         ScheduledFuture<?> future = registry.startHeartbeat(3L, 0);
 
-        assertThatCode(() -> registry.stopHeartbeat(3L, 0, future)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> registry.stopHeartbeat(3L, 0, future))
+                .isInstanceOf(RedisConnectionFailureException.class);
         assertThat(future.isCancelled()).isTrue();
     }
 
@@ -185,98 +186,6 @@ class HeartbeatRegistryTest {
 
         verify(zSetOperations).remove(KEY, "1:0");
         verify(zSetOperations, never()).remove(KEY, "1:1");
-    }
-
-    @Test
-    void Redis_복구_직후_유예_구간에는_findExpiredAttempts가_빈_집합을_반환한다() {
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
-                .thenThrow(new RedisConnectionFailureException("redis down"))
-                .thenReturn(Set.of("21:0", "22:0"));
-
-        assertThat(registry.findExpiredAttempts()).isEmpty();
-
-        clock.advance(Duration.ofSeconds(9));
-        assertThat(registry.findExpiredAttempts()).isEmpty();
-        verify(zSetOperations, times(1)).rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble());
-
-        clock.advance(Duration.ofSeconds(2));
-        assertThat(registry.findExpiredAttempts())
-                .containsExactlyInAnyOrder(new JobAttempt(21L, 0), new JobAttempt(22L, 0));
-    }
-
-    @Test
-    void 유예_구간에는_hasLiveHeartbeat가_true를_반환한다() {
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        when(zSetOperations.score(KEY, "31:0"))
-                .thenThrow(new RedisConnectionFailureException("redis down"));
-
-        assertThat(registry.hasLiveHeartbeat(31L, 0)).isTrue();
-
-        clock.advance(Duration.ofSeconds(9));
-        assertThat(registry.hasLiveHeartbeat(32L, 0)).isTrue();
-        verify(zSetOperations, never()).score(KEY, "32:0");
-
-        clock.advance(Duration.ofSeconds(2));
-        assertThat(registry.hasLiveHeartbeat(32L, 0)).isFalse();
-        verify(zSetOperations).score(KEY, "32:0");
-    }
-
-    @Test
-    void 유예_구간에도_refreshHeartbeat는_계속_시도한다() {
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
-                .thenThrow(new RedisConnectionFailureException("redis down"));
-
-        registry.findExpiredAttempts();
-        clock.advance(Duration.ofSeconds(1));
-
-        ScheduledFuture<?> future = registry.startHeartbeat(41L, 0);
-        future.cancel(false);
-
-        verify(zSetOperations, atLeastOnce()).add(eq(KEY), eq("41:0"), anyDouble());
-    }
-
-    @Test
-    void 유예_구간에도_removeHeartbeat는_계속_시도한다() {
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
-                .thenThrow(new RedisConnectionFailureException("redis down"));
-
-        registry.findExpiredAttempts();
-        clock.advance(Duration.ofSeconds(1));
-
-        registry.removeHeartbeat(42L, 0);
-
-        verify(zSetOperations).remove(KEY, "42:0");
-    }
-
-    @Test
-    void refreshHeartbeat_실패가_findExpiredAttempts_회수를_보류시킨다() {
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        when(zSetOperations.add(anyString(), anyString(), anyDouble()))
-                .thenThrow(new RedisConnectionFailureException("redis down"));
-
-        ScheduledFuture<?> future = registry.startHeartbeat(43L, 0);
-        future.cancel(false);
-
-        clock.advance(Duration.ofSeconds(9));
-        assertThat(registry.findExpiredAttempts()).isEmpty();
-        verify(zSetOperations, never()).rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble());
-    }
-
-    @Test
-    void 실패_이력이_없으면_유예가_걸리지_않는다() {
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        when(zSetOperations.rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble()))
-                .thenReturn(Set.of("51:0"));
-        when(zSetOperations.score(KEY, "52:0")).thenReturn((double) (clock.instant().getEpochSecond() + 30));
-
-        assertThat(registry.findExpiredAttempts()).containsExactly(new JobAttempt(51L, 0));
-        assertThat(registry.hasLiveHeartbeat(52L, 0)).isTrue();
-
-        verify(zSetOperations).rangeByScore(eq(KEY), eq(Double.NEGATIVE_INFINITY), anyDouble());
-        verify(zSetOperations).score(KEY, "52:0");
     }
 
     @Test

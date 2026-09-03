@@ -123,9 +123,8 @@ H2(테스트 전용, `testRuntimeOnly`) / Testcontainers(MySQL, Redis)
   등록 전 워커 크래시, 결과 반영(confirm) 재시도 소진을 모두 커버
 - **Heartbeat**: Redis sorted set에 워커가 실제 실행을 시작하는 시점(`GenerationJobProcessor.runGeneration`)에 등록하고
   `app.heartbeat.refresh-interval-seconds`(5초)마다 갱신 — job 수와 무관하게 O(1) 조회로 마감 지난 job만
-  스캔. Redis 장애 중에는 회수를 억제하되, 억제가 `app.heartbeat.suppression-alert-seconds`(60초)를 넘기면
-  ERROR로 경보한다. `spring.data.redis.timeout`(2초)으로 Redis 커맨드 타임아웃을 짧게 잡아, 느려진 Redis가
-  heartbeat 만료(10초) 전에 확실히 예외로 드러나게 하므로 억제 로직이 제때 작동한다
+  스캔. `spring.data.redis.timeout`(2초)으로 Redis 커맨드 타임아웃을 짧게 잡아, 느려진 Redis가
+  heartbeat 만료(10초) 전에 확실히 예외로 드러나게 한다
 - **워커 동시 실행 상한**: `app.worker.concurrency`(3)가 전용 executor(`generationWorkerExecutor`)의
   스레드 수를 단독으로 결정한다 — executor 내부 큐 용량은 0이라 Spring의 `ThreadPoolTaskExecutor`는
   내부적으로 `SynchronousQueue`를 쓰고, 스레드가 모두 사용 중이면 `execute()`가 즉시 거부한다. 워커는
@@ -189,7 +188,6 @@ com.example.credit_system
 └── scheduler/
     ├── DeadJobSchedulerTask.java        # heartbeat 만료·정체 job 회수 / 재시도·최종환불 투입
     ├── HeartbeatRegistry.java           # Redis sorted-set heartbeat
-    ├── RedisOutageGate.java             # Redis 장애 중 회수 억제·유예 판정과 장기 억제 경보
     ├── LedgerReconciliationTask.java    # initial_balance + Σledger = balance 대사, 불일치 시 ERROR 경보
     └── IdempotencyKeyCleanupTask.java   # 보존 기간 지난 idempotency_keys 배치 삭제
 ```

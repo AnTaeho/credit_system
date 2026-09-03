@@ -27,7 +27,6 @@ public class IdempotencyKeyCleanupTask {
     @Scheduled(fixedDelayString = "${app.scheduling.idempotency-cleanup-interval-millis:3600000}")
     public void cleanup() {
         Instant cutoff = Instant.now().minus(idempotencyProperties.retentionDays(), ChronoUnit.DAYS);
-        int deletedCount = 0;
         List<Long> ids;
         do {
             ids = idempotencyKeyRepository.findIdsCreatedBefore(cutoff, PageRequest.of(0, CLEANUP_BATCH_SIZE));
@@ -35,17 +34,11 @@ public class IdempotencyKeyCleanupTask {
                 break;
             }
             try {
-                deletedCount += idempotencyKeyRepository.deleteByIdIn(ids);
+                idempotencyKeyRepository.deleteByIdIn(ids);
             } catch (RuntimeException e) {
                 log.warn("멱등키 정리 배치 삭제 실패, 이번 주기 중단", e);
                 break;
             }
         } while (ids.size() == CLEANUP_BATCH_SIZE);
-
-        if (deletedCount > 0) {
-            log.info("멱등키 정리 주기 완료: deletedCount={}", deletedCount);
-        } else {
-            log.debug("멱등키 정리 주기 완료: 삭제 대상 없음");
-        }
     }
 }

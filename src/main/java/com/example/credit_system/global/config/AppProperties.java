@@ -16,7 +16,7 @@ public record AppProperties(
     public record Stub(double failureRate, long minDelayMillis, long maxDelayMillis) {
     }
 
-    public record Heartbeat(long timeoutSeconds, long refreshIntervalSeconds, long suppressionAlertSeconds) {
+    public record Heartbeat(long timeoutSeconds, long refreshIntervalSeconds) {
 
         public Heartbeat {
             if (timeoutSeconds < 1) {
@@ -30,13 +30,9 @@ public record AppProperties(
             if (refreshIntervalSeconds >= timeoutSeconds) {
                 throw new IllegalArgumentException(
                         "heartbeat refresh-interval-seconds는 timeout-seconds보다 작아야 합니다. "
-                                + "그렇지 않으면 복구 유예 동안 살아있는 워커가 heartbeat를 갱신하지 못해 정상 job이 회수됩니다: "
+                                + "그렇지 않으면 갱신 주기가 돌아오기 전에 heartbeat가 만료되어 살아있는 job이 회수됩니다: "
                                 + "refresh-interval-seconds=" + refreshIntervalSeconds
                                 + ", timeout-seconds=" + timeoutSeconds);
-            }
-            if (suppressionAlertSeconds < 1) {
-                throw new IllegalArgumentException(
-                        "heartbeat suppression-alert-seconds는 1 이상이어야 합니다: " + suppressionAlertSeconds);
             }
         }
     }
